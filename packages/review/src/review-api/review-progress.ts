@@ -1,9 +1,9 @@
 import {
-  type DiffLens,
+  type CoverageFile,
   type FileLineRange,
-  type Lens,
   type LensSource,
   type Pins,
+  type ResolvedLens,
   ReviewInputError,
   SelectionUnavailableError,
   type SelectionUnavailableReason,
@@ -11,22 +11,18 @@ import {
   anchorPins,
   boardRepositoryId,
   comparisonKey,
+  emptyCoverage,
   fileLineRangeSchema,
   lensSelections,
   patchRows,
   resolveDiffSelection,
+  resolveLenses,
   selectionKey,
   selectionReferences,
 } from "@dev.fast/whiteboard-document";
-import { type CoverageFile, emptyCoverage } from "@review/viewed-coverage.js";
 import { z } from "zod";
 
 import type { ComparisonCoverage } from "./comparison-coverage.js";
-import {
-  changedPath,
-  resolveFileLens,
-  uncategorizedSources,
-} from "./file-lenses.js";
 import type { LocalReviewData } from "./local-data.js";
 import type { ReviewStore, Snapshot } from "./store.js";
 
@@ -60,7 +56,7 @@ export interface ReviewProgress {
   referenceFiles?: Record<string, Record<string, CoverageFile>>;
   resolvedSelections: Record<string, FileLineRange[]>;
   /** The review's file lenses, then the automatic "Uncategorized changes". */
-  lenses: (DiffLens & { unavailable?: string; pending?: boolean })[];
+  lenses: (ResolvedLens & { pending?: boolean })[];
   /** Untracked files a live worktree review leaves out of its comparison. */
   untrackedFiles?: number;
 }
@@ -243,40 +239,17 @@ export async function reviewProgress(
     }
   };
 
-  const lenses: ReviewProgress["lenses"] = await Promise.all(
+  // Explicit ranges use the same pin validation as diagram evidence.
+  await Promise.all(
     (snapshot.lenses ?? []).map(async (authored) => {
-      const lens = { id: authored.id, title: authored.title };
-
       try {
-        // Explicit ranges use the same pin validation as diagram evidence.
         await Promise.all(
           lensSelections([authored]).map(({ source }) =>
             resolveAvailable(source),
           ),
         );
-
-        const resolved = resolveFileLens(
-          authored,
-          files,
-          fileSources,
-          (source) => resolvedSelections[selectionKey(source)] ?? [],
-        );
-
-        return {
-          ...lens,
-          ...resolved,
-          pending: counting,
-          unavailable:
-            counting || resolved.fileCount
-              ? undefined
-              : "No files match these targets",
-        };
       } catch {
-        return {
-          ...lens,
-          sources: [],
-          unavailable: "Source links need updating at these pins",
-        };
+        /* resolveLenses reports a lens whose anchors don't parse. */
       }
     }),
   );
@@ -295,27 +268,19 @@ export async function reviewProgress(
     }),
   );
 
-  const uncategorized = counting
-    ? []
-    : uncategorizedSources(
-        files,
-        lenses
-          .filter((lens) => !lens.unavailable)
-          .flatMap((lens) => lens.sources),
-      );
-
-  lenses.push({
-    id: UNCATEGORIZED_LENS_ID,
-    title: "Uncategorized changes",
-    sources: uncategorized,
-    wholeFiles: false,
-    fileCount: new Set(uncategorized.map(changedPath(files))).size,
-    pending: counting,
-    unavailable:
-      counting || uncategorized.length
-        ? undefined
-        : "All changed lines are covered by lenses",
-  });
+  const lenses = pendingLenses(
+    resolveLenses(
+      snapshot.lenses ?? [],
+      files,
+      fileSources,
+      (source) =>
+        unavailableSelections[selectionKey(source)]
+          ? undefined
+          : (resolvedSelections[selectionKey(source)] ?? []),
+      { nocase: process.platform === "darwin" || process.platform === "win32" },
+    ),
+    counting,
+  );
 
   const progress: ReviewProgress = {
     complete: !counting && !pendingSources.size,
@@ -333,71 +298,21 @@ export async function reviewProgress(
   return progress;
 }
 
-/** The most files an uncategorized report names; the rest are counted. */
-const REPORT_FILES = 50;
+/** A lens with no fileCount failed to resolve, so it is never pending. */
+export function pendingLenses(
+  lenses: readonly ResolvedLens[],
+  counting: boolean,
+): ReviewProgress["lenses"] {
+  return lenses.map((lens) => {
+    if (lens.fileCount === undefined) return lens;
 
-export interface UncategorizedReport {
-  /** Changed lines, counting each side, that no lens selects. */
-  lines: number;
-  files: {
-    path: string;
-    lines: number;
-    ranges: Pick<FileLineRange, "side" | "fromLine" | "toLine">[];
-  }[];
-  /** Files past the first REPORT_FILES, left out of `files`. */
-  moreFiles?: number;
-}
+    if (!counting) return { ...lens, pending: false };
 
-/** What a lens author still has to place: the changed lines no lens selects,
- * grouped by file. */
-export function uncategorizedReport(
-  progress: ReviewProgress,
-): UncategorizedReport {
-  const sources =
-    progress.lenses.find((lens) => lens.id === UNCATEGORIZED_LENS_ID)
-      ?.sources ?? [];
-
-  const byPath = new Map<string, UncategorizedReport["files"][number]>();
-  const pathOf = changedPath(progress.files);
-
-  for (const source of sources) {
-    const path = pathOf(source);
-
-    const entry = byPath.get(path) ?? { path, lines: 0, ranges: [] };
-    entry.lines += source.toLine - source.fromLine + 1;
-    entry.ranges.push({
-      side: source.side,
-      fromLine: source.fromLine,
-      toLine: source.toLine,
-    });
-    byPath.set(path, entry);
-  }
-
-  const files = [...byPath.values()];
-
-  const report: UncategorizedReport = {
-    lines: files.reduce((total, file) => total + file.lines, 0),
-    files: files.slice(0, REPORT_FILES),
-  };
-
-  if (files.length > REPORT_FILES)
-    report.moreFiles = files.length - REPORT_FILES;
-
-  return report;
-}
-
-/** Each lens as authored, with what it resolves to, for a lens author. */
-export function lensReport(lenses: readonly Lens[], progress: ReviewProgress) {
-  return {
-    lenses: lenses.map((lens) => {
-      const resolved = progress.lenses.find((item) => item.id === lens.id);
-
-      return {
-        ...lens,
-        fileCount: resolved?.fileCount ?? 0,
-        ...(resolved?.unavailable && { unavailable: resolved.unavailable }),
-      };
-    }),
-    uncategorized: uncategorizedReport(progress),
-  };
+    return {
+      ...lens,
+      ...(lens.id === UNCATEGORIZED_LENS_ID && { sources: [], fileCount: 0 }),
+      unavailable: undefined,
+      pending: true,
+    };
+  });
 }

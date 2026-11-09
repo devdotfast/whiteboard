@@ -1,6 +1,6 @@
 {
   "name": "@dev.fast/board-protocol",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "Wire contract between a hosted whiteboard board server and its clients.",
   "license": "MIT",
   "repository": {
@@ -26,6 +26,7 @@
   "scripts": {
     "build": "tsdown",
     "prepack": "pnpm run build",
+    "test": "vitest run",
     "typecheck": "pnpm -w exec tsc -p packages/board-protocol/tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -34,7 +35,8 @@
   },
   "devDependencies": {
     "tsdown": "0.22.14",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "vitest": "4.1.12"
   },
   "engines": {
     "node": ">=22"

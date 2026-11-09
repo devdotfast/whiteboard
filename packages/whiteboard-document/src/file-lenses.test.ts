@@ -1,12 +1,14 @@
-import { rangeAnchor, sourceAnchors } from "@dev.fast/whiteboard-document";
-import { type CoverageFile, coverageSources } from "@review/viewed-coverage.js";
 import { expect, it } from "vitest";
 
+import { type CoverageFile, coverageSources } from "./coverage.js";
+import { UNCATEGORIZED_LENS_ID } from "./diff-lenses.js";
 import {
   fileLensMatcher,
   resolveFileLens,
+  resolveLenses,
   uncategorizedSources,
 } from "./file-lenses.js";
+import { rangeAnchor, sourceAnchors } from "./lens-selection.js";
 
 it("matches file paths, nested test globs, docs and dot directories without scanning other files", () => {
   const patterns = [
@@ -26,6 +28,24 @@ it("matches file paths, nested test globs, docs and dot directories without scan
     expect(fileLensMatcher(patterns)({ path })).toBe(true);
   expect(fileLensMatcher(patterns)({ path: "src/main.ts" })).toBe(false);
   expect(fileLensMatcher(["./docs/**"])({ path: "docs/guide.md" })).toBe(true);
+  expect(fileLensMatcher(["./src/a.ts"])({ path: "src/a.ts" })).toBe(true);
+});
+
+it("matches glob segments case-insensitively only when asked", () => {
+  expect(fileLensMatcher(["**/*.ts"])({ path: "SRC/A.TS" })).toBe(false);
+  expect(
+    fileLensMatcher(["**/*.ts"], { nocase: true })({ path: "SRC/A.TS" }),
+  ).toBe(true);
+});
+
+it("compiles a pattern with many brace pairs quickly and keeps ordinary braces working", () => {
+  const started = performance.now();
+  const matches = fileLensMatcher([`src/${"{a,b}".repeat(17)}`]);
+
+  expect(matches({ path: `src/${"a".repeat(17)}` })).toBe(true);
+  expect(matches({ path: "src/main.ts" })).toBe(false);
+  expect(performance.now() - started).toBeLessThan(1000);
+  expect(fileLensMatcher(["src/{a,b}.ts"])({ path: "src/a.ts" })).toBe(true);
 });
 
 it("keeps a renamed file in a group matching either side of the rename", () => {
@@ -184,4 +204,146 @@ it("resolves overlapping lenses and what they leave uncategorized on a 10,000-fi
   expect(performance.now() - start).toBeLessThan(3_000);
   expect(lenses.map((lens) => lens.fileCount)).toEqual([3334, 6666, 2971]);
   expect(uncategorized).toEqual([]);
+});
+
+it("resolves each lens in order, dropping anchors it cannot resolve, then what they leave uncategorized", () => {
+  const file: CoverageFile = {
+    path: "src/a.ts",
+    fingerprint: "a",
+    changed: { base: [], head: [[0, 6]] },
+    viewed: { base: [], head: [] },
+  };
+
+  const files = [file];
+
+  const fileSources = new Map([
+    [file.path, coverageSources(file, file.changed)],
+  ]);
+
+  const resolve = (source: Parameters<typeof sourceAnchors>[0]) =>
+    source.file === "src/gone.ts"
+      ? undefined
+      : source.file === "src/blank.ts"
+        ? []
+        : sourceAnchors(source);
+
+  const [partial, empty, blank, uncategorized] = resolveLenses(
+    [
+      {
+        id: "partial",
+        title: "Partial",
+        targets: [
+          {
+            kind: "ranges",
+            sources: ["head/src/a.ts#L1-L3", "head/src/gone.ts#L1-L2"],
+          },
+        ],
+      },
+      {
+        id: "empty",
+        title: "Empty",
+        targets: [{ kind: "ranges", sources: ["head/src/gone.ts#L1-L2"] }],
+      },
+      {
+        id: "blank",
+        title: "Blank",
+        targets: [{ kind: "ranges", sources: ["head/src/blank.ts#L1-L2"] }],
+      },
+    ],
+    files,
+    fileSources,
+    resolve,
+  );
+
+  const covered = {
+    side: "head" as const,
+    file: "src/a.ts",
+    fromLine: 1,
+    toLine: 3,
+  };
+
+  expect(partial).toEqual({
+    id: "partial",
+    title: "Partial",
+    sources: [covered],
+    fileCount: 1,
+    wholeFiles: false,
+    unavailableAnchors: ["head/src/gone.ts#L1-L2"],
+  });
+  expect(empty).toMatchObject({
+    sources: [],
+    fileCount: 0,
+    unavailable: "No files match these targets",
+  });
+  expect(blank).toEqual({
+    id: "blank",
+    title: "Blank",
+    sources: [],
+    fileCount: 0,
+    wholeFiles: false,
+    unavailable: "No files match these targets",
+  });
+  expect(uncategorized).toEqual({
+    id: UNCATEGORIZED_LENS_ID,
+    title: "Uncategorized changes",
+    sources: [{ ...covered, fromLine: 4, toLine: 6 }],
+    fileCount: 1,
+    wholeFiles: false,
+  });
+
+  expect(
+    resolveLenses(
+      [
+        {
+          id: "all",
+          title: "All",
+          targets: [{ kind: "files", patterns: ["src/**"] }],
+        },
+      ],
+      files,
+      fileSources,
+      resolve,
+    ).at(-1),
+  ).toEqual({
+    id: UNCATEGORIZED_LENS_ID,
+    title: "Uncategorized changes",
+    sources: [],
+    fileCount: 0,
+    wholeFiles: false,
+    unavailable: "All changed lines are covered by lenses",
+  });
+});
+
+it("marks a lens whose anchors fail to resolve and leaves its lines uncategorized", () => {
+  const file: CoverageFile = {
+    path: "src/a.ts",
+    fingerprint: "a",
+    changed: { base: [], head: [[0, 2]] },
+    viewed: { base: [], head: [] },
+  };
+
+  const [broken, uncategorized] = resolveLenses(
+    [
+      {
+        id: "broken",
+        title: "Broken",
+        targets: [{ kind: "ranges", sources: ["head/src/a.ts#L1-L2"] }],
+      },
+    ],
+    [file],
+    new Map([[file.path, coverageSources(file, file.changed)]]),
+    () => {
+      throw new Error("stale pins");
+    },
+  );
+
+  expect(broken).toEqual({
+    id: "broken",
+    title: "Broken",
+    sources: [],
+    unavailable: "Source links need updating at these pins",
+  });
+  expect(uncategorized!.sources).toEqual([
+    { side: "head", file: "src/a.ts", fromLine: 1, toLine: 2 },
+  ]);
 });

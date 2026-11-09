@@ -1,18 +1,96 @@
-import {
-  type FileLineRange,
-  type Lens,
-  type LensSource,
-  anchorSelection,
-} from "@dev.fast/whiteboard-document";
+import { Minimatch } from "minimatch";
+
 import {
   type CoverageFile,
   coverageSources,
   scopedCoverage,
   sourcesForFile,
-  subtractIntervals,
-  unionIntervals,
-} from "@review/viewed-coverage.js";
-import { Minimatch } from "minimatch";
+} from "./coverage.js";
+import {
+  type DiffLens,
+  type Lens,
+  UNCATEGORIZED_LENS_ID,
+} from "./diff-lenses.js";
+import { subtractIntervals, unionIntervals } from "./intervals.js";
+import { type LensSource, anchorSelection } from "./lens-selection.js";
+import type { FileLineRange } from "./source.js";
+
+export interface FileLensOptions {
+  /** Match paths case-insensitively, as on macOS and Windows. */
+  nocase?: boolean;
+}
+
+export interface ResolvedLens extends DiffLens {
+  unavailable?: string;
+  /** Range anchors, as authored, that resolved to nothing. */
+  unavailableAnchors?: string[];
+}
+
+/** Ends with the Uncategorized lens. `resolve` returns undefined for an anchor
+ * it cannot resolve. */
+export function resolveLenses(
+  lenses: readonly Lens[],
+  files: readonly CoverageFile[],
+  fileSources: ReadonlyMap<string, FileLineRange[]>,
+  resolve: (source: LensSource) => FileLineRange[] | undefined,
+  options?: FileLensOptions,
+): ResolvedLens[] {
+  const resolved: ResolvedLens[] = lenses.map((lens) => {
+    const { id, title } = lens;
+    const unavailableAnchors: string[] = [];
+
+    try {
+      const result = resolveFileLens(
+        lens,
+        files,
+        fileSources,
+        (source, anchor) => {
+          const sources = resolve(source);
+
+          if (!sources) unavailableAnchors.push(anchor);
+
+          return sources ?? [];
+        },
+        options,
+      );
+
+      return {
+        id,
+        title,
+        ...result,
+        ...(unavailableAnchors.length && { unavailableAnchors }),
+        ...(!result.fileCount && {
+          unavailable: "No files match these targets",
+        }),
+      };
+    } catch {
+      return {
+        id,
+        title,
+        sources: [],
+        unavailable: "Source links need updating at these pins",
+      };
+    }
+  });
+
+  const uncategorized = uncategorizedSources(
+    files,
+    resolved.flatMap((lens) => (lens.unavailable ? [] : lens.sources)),
+  );
+
+  resolved.push({
+    id: UNCATEGORIZED_LENS_ID,
+    title: "Uncategorized changes",
+    sources: uncategorized,
+    wholeFiles: false,
+    fileCount: new Set(uncategorized.map(changedPath(files))).size,
+    ...(!uncategorized.length && {
+      unavailable: "All changed lines are covered by lenses",
+    }),
+  });
+
+  return resolved;
+}
 
 /** Subtract authored coverage, independently of viewed state. */
 export function uncategorizedSources(
@@ -36,16 +114,17 @@ export function resolveFileLens(
   lens: Lens,
   files: readonly CoverageFile[],
   fileSources: ReadonlyMap<string, FileLineRange[]>,
-  resolve: (source: LensSource) => FileLineRange[],
+  resolve: (source: LensSource, anchor: string) => FileLineRange[],
+  options?: FileLensOptions,
 ) {
   const targets = lens.targets;
 
   const selected = targets.flatMap((target) => {
     if (target.kind === "ranges")
       return target.sources.flatMap((source) =>
-        resolve(anchorSelection(source)),
+        resolve(anchorSelection(source), source),
       );
-    const matches = fileLensMatcher(target.patterns);
+    const matches = fileLensMatcher(target.patterns, options);
 
     return files
       .filter(matches)
@@ -99,18 +178,20 @@ export function changedPath(
 /** Evaluate authored patterns against the changed-file list, never the filesystem. */
 export function fileLensMatcher(
   patterns: readonly string[],
+  options?: FileLensOptions,
 ): (file: { path: string; previousPath?: string }) => boolean {
   const matchers = patterns.map((pattern) => {
     const normalized = pattern.startsWith("./") ? pattern.slice(2) : pattern;
 
     const glob = new Minimatch(normalized, {
-      nocase: process.platform === "darwin" || process.platform === "win32",
+      nocase: options?.nocase,
       windowsPathsNoEscape: true,
       nonegate: true,
       nocomment: true,
       optimizationLevel: 2,
       platform: "linux",
       nocaseMagicOnly: true,
+      braceExpandMax: 256,
     });
 
     return (path: string) => path === normalized || glob.match(path);

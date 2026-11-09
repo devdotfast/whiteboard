@@ -2,6 +2,8 @@ import {
   type EditSummary,
   documentSchema,
   editSchema,
+  lensEditSchema,
+  lensSchema,
 } from "@dev.fast/whiteboard-document";
 import { z } from "zod";
 
@@ -55,9 +57,17 @@ export const boardSnapshotSchema = z.object({
   document: documentSchema,
   createdAt: z.string(),
   lastEdit: editSummarySchema.optional(),
+  lenses: z.array(lensSchema).optional(),
 });
 
 export type BoardSnapshot = z.infer<typeof boardSnapshotSchema>;
+
+export const lensOpSchema = z.strictObject({
+  type: z.literal("lens_edit"),
+  edit: lensEditSchema,
+});
+
+export type LensOp = z.infer<typeof lensOpSchema>;
 
 export const boardLineSchema = z.discriminatedUnion("kind", [
   z.object({
@@ -70,7 +80,7 @@ export const boardLineSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("op"),
     seq: z.number(),
-    edit: editSchema,
+    edit: z.union([editSchema, lensOpSchema]),
     nextId: z.number(),
     summary: editSummarySchema.optional(),
     activityId: z.string().optional(),
@@ -111,6 +121,21 @@ export const editResultSchema = z.object({
 });
 
 export type EditResult = z.infer<typeof editResultSchema>;
+
+export const lensEditRequestSchema = editRequestSchema.extend({
+  edit: lensEditSchema,
+});
+
+export type LensEditRequest = z.infer<typeof lensEditRequestSchema>;
+
+export const lensEditResultSchema = z.object({
+  seq: z.number(),
+  lens: z.object({ id: z.string(), title: z.string() }),
+  /** True when a retried requestId got its first answer back. */
+  replayed: z.boolean().optional(),
+});
+
+export type LensEditResult = z.infer<typeof lensEditResultSchema>;
 
 /** Upserts by `activityId` (minted when omitted); `focus: null` clears, `end`
  * removes. `hold` replaces the activity's held blocks; `[]` clears them. */

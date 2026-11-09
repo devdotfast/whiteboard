@@ -17,6 +17,7 @@ import {
   type Applied,
   type Block,
   type BoardLinkRef,
+  type Coverage,
   type EditSummary,
   type Element,
   type FileLineRange,
@@ -39,6 +40,7 @@ import {
   documentSchema,
   editSchema,
   elements,
+  emptyCoverage,
   explicitPins,
   lensEditSchema,
   lensSchema,
@@ -53,18 +55,14 @@ import {
   sourceAnchors,
   sourceReferences,
   summarizeEdit,
+  updateCoverage,
 } from "@dev.fast/whiteboard-document";
 import type { GitHubPullRequest } from "@review/github-pr-graph.js";
 import {
   migrateStoredLenses,
   readStoredDocument,
 } from "@review/stored-document-migration.js";
-import {
-  type Coverage,
-  coverageSchema,
-  emptyCoverage,
-  updateCoverage,
-} from "@review/viewed-coverage.js";
+import { coverageSchema } from "@review/viewed-coverage.js";
 import { z } from "zod";
 
 import { ReviewActivity } from "./activity.js";

@@ -3,8 +3,10 @@ import {
   diff as readLocalVcsDiff,
 } from "@dev.fast/local-vcs";
 import { jsonString, parseJsonText } from "@dev.fast/review-protocol";
-
-import { type DiffHunkLine, parseUnifiedPatch } from "./unified-diff";
+import {
+  type DiffHunkLine,
+  parseUnifiedPatch,
+} from "@dev.fast/whiteboard-document";
 
 export interface SoftwareMapDiffLineCount {
   additions: number;

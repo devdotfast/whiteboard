@@ -16,3 +16,53 @@ export function unionIntervals(
 
   return result;
 }
+
+export function intersectIntervals(
+  left: readonly LineInterval[],
+  right: readonly LineInterval[],
+): LineInterval[] {
+  const result: LineInterval[] = [];
+
+  const a = unionIntervals(left),
+    b = unionIntervals(right);
+
+  let i = 0,
+    j = 0;
+
+  while (i < a.length && j < b.length) {
+    const start = Math.max(a[i][0], b[j][0]),
+      end = Math.min(a[i][1], b[j][1]);
+
+    if (start < end) result.push([start, end]);
+
+    if (a[i][1] < b[j][1]) i++;
+    else j++;
+  }
+
+  return result;
+}
+
+export function subtractIntervals(
+  from: readonly LineInterval[],
+  remove: readonly LineInterval[],
+): LineInterval[] {
+  const result: LineInterval[] = [];
+  const removed = unionIntervals(remove);
+
+  for (const [start, end] of unionIntervals(from)) {
+    let cursor = start;
+
+    for (const [lower, upper] of removed) {
+      if (upper <= cursor) continue;
+
+      if (lower >= end) break;
+
+      if (lower > cursor) result.push([cursor, lower]);
+      cursor = Math.min(end, Math.max(cursor, upper));
+    }
+
+    if (cursor < end) result.push([cursor, end]);
+  }
+
+  return result;
+}

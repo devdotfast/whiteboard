@@ -18,6 +18,21 @@ export { animationCode } from "./blocks/animation.js";
 
 export { label } from "./blocks/definition.js";
 
+export {
+  type ChangeCounts,
+  type Coverage,
+  type CoverageFile,
+  type CoverageProgress,
+  changeCounts,
+  coverageProgress,
+  coverageSources,
+  emptyCoverage,
+  mergeCoverageProgress,
+  scopedCoverage,
+  sourcesForFile,
+  updateCoverage,
+} from "./coverage.js";
+
 export type { Definitions } from "./blocks/index.js";
 
 export {
@@ -102,9 +117,24 @@ export {
   writableBlockTypes,
 } from "./document.js";
 
+export {
+  type FileLensOptions,
+  type ResolvedLens,
+  changedPath,
+  fileLensMatcher,
+  resolveFileLens,
+  resolveLenses,
+  uncategorizedSources,
+} from "./file-lenses.js";
+
 export { ReviewInputError } from "./input-error.js";
 
-export { type LineInterval, unionIntervals } from "./intervals.js";
+export {
+  type LineInterval,
+  intersectIntervals,
+  subtractIntervals,
+  unionIntervals,
+} from "./intervals.js";
 
 export {
   type AlignmentRow,
@@ -129,11 +159,24 @@ export {
 } from "./lens-selection.js";
 
 export {
+  type UncategorizedReport,
+  lensReport,
+  uncategorizedReport,
+} from "./lens-report.js";
+
+export {
   type MarkdownNode,
   markdownNodes,
   markdownText,
   parseMarkdown,
 } from "./markdown.js";
+
+export {
+  type DiffHunk,
+  type DiffHunkLine,
+  parseUnifiedPatch,
+  patchChanges,
+} from "./unified-patch.js";
 
 export {
   type FileLineRange,

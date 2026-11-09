@@ -9,20 +9,18 @@ import {
 } from "@dev.fast/review-protocol";
 import {
   type AlignmentRow,
-  type FileLineRange,
-  type Pins,
-  patchRows,
-} from "@dev.fast/whiteboard-document";
-import { parseUnifiedPatch } from "@review/unified-diff.js";
-import {
   type Coverage,
   type CoverageFile,
+  type FileLineRange,
   type LineInterval,
+  type Pins,
   emptyCoverage,
   intersectIntervals,
+  patchChanges,
+  patchRows,
   subtractIntervals,
   unionIntervals,
-} from "@review/viewed-coverage.js";
+} from "@dev.fast/whiteboard-document";
 
 import type { LocalReviewData } from "./local-data.js";
 
@@ -60,19 +58,7 @@ export async function comparisonCoverage(
       patches?.get(file.path) ??
       (await data.changes(pins, file.path, file.previousPath));
 
-    const changed = emptyCoverage();
-
-    for (const hunk of parseUnifiedPatch(file.path, patch))
-      for (const line of hunk.lines) {
-        if (line.kind === "add")
-          changed.head.push([line.newLine! - 1, line.newLine!]);
-
-        if (line.kind === "remove")
-          changed.base.push([line.oldLine! - 1, line.oldLine!]);
-      }
-
-    changed.base = unionIntervals(changed.base);
-    changed.head = unionIntervals(changed.head);
+    const changed = patchChanges(file.path, patch);
 
     const [base, head] = await Promise.all([
       file.status === "added"

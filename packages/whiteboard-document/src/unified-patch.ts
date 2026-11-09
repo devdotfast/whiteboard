@@ -1,3 +1,6 @@
+import { type Coverage, emptyCoverage } from "./coverage.js";
+import { unionIntervals } from "./intervals.js";
+
 export interface DiffHunk {
   file: string;
   oldStart: number;
@@ -68,4 +71,25 @@ export function parseUnifiedPatch(
   }
 
   return hunks;
+}
+
+export function patchChanges(
+  file: string,
+  patch: string | null | undefined,
+): Coverage {
+  const changed = emptyCoverage();
+
+  for (const hunk of parseUnifiedPatch(file, patch))
+    for (const line of hunk.lines) {
+      if (line.kind === "add")
+        changed.head.push([line.newLine! - 1, line.newLine!]);
+
+      if (line.kind === "remove")
+        changed.base.push([line.oldLine! - 1, line.oldLine!]);
+    }
+
+  return {
+    base: unionIntervals(changed.base),
+    head: unionIntervals(changed.head),
+  };
 }
