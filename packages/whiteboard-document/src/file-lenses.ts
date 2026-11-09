@@ -28,8 +28,8 @@ export interface ResolvedLens extends DiffLens {
   unavailableAnchors?: string[];
 }
 
-/** Each authored lens in order, then the changed lines none of them select.
- * `resolve` returns undefined for an anchor it cannot resolve. */
+/** Ends with the Uncategorized lens. `resolve` returns undefined for an anchor
+ * it cannot resolve. */
 export function resolveLenses(
   lenses: readonly Lens[],
   files: readonly CoverageFile[],

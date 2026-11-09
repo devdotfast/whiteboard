@@ -303,7 +303,7 @@ export async function reviewProgress(
   return progress;
 }
 
-/** A lens whose anchors threw has no count to wait for. */
+/** A lens with no fileCount failed to resolve, so it is never pending. */
 export function pendingLenses(
   lenses: readonly ResolvedLens[],
   counting: boolean,
