@@ -214,9 +214,13 @@ it("resolves each lens in order, dropping anchors it cannot resolve, then what t
   ]);
 
   const resolve = (source: Parameters<typeof sourceAnchors>[0]) =>
-    source.file === "src/gone.ts" ? undefined : sourceAnchors(source);
+    source.file === "src/gone.ts"
+      ? undefined
+      : source.file === "src/blank.ts"
+        ? []
+        : sourceAnchors(source);
 
-  const [partial, empty, uncategorized] = resolveLenses(
+  const [partial, empty, blank, uncategorized] = resolveLenses(
     [
       {
         id: "partial",
@@ -232,6 +236,11 @@ it("resolves each lens in order, dropping anchors it cannot resolve, then what t
         id: "empty",
         title: "Empty",
         targets: [{ kind: "ranges", sources: ["head/src/gone.ts#L1-L2"] }],
+      },
+      {
+        id: "blank",
+        title: "Blank",
+        targets: [{ kind: "ranges", sources: ["head/src/blank.ts#L1-L2"] }],
       },
     ],
     files,
@@ -257,6 +266,14 @@ it("resolves each lens in order, dropping anchors it cannot resolve, then what t
   expect(empty).toMatchObject({
     sources: [],
     fileCount: 0,
+    unavailable: "No files match these targets",
+  });
+  expect(blank).toEqual({
+    id: "blank",
+    title: "Blank",
+    sources: [],
+    fileCount: 0,
+    wholeFiles: false,
     unavailable: "No files match these targets",
   });
   expect(uncategorized).toEqual({

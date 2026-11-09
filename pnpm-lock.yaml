@@ -338,9 +338,6 @@ importers:
       micromark-extension-gfm:
         specifier: 3.0.0
         version: 3.0.0
-      minimatch:
-        specifier: 10.2.6
-        version: 10.2.6
       pi-acp:
         specifier: 0.0.34
         version: 0.0.34
