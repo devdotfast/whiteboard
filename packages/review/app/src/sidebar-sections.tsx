@@ -964,11 +964,8 @@ function ShowMoreRow({
   );
 }
 
-/**
- * Boards new since the reader last viewed them, five until asked. Command
- * and shift clicks pick rows; a right click offers to mark the pick, or the
- * row under it, read. Marked boards leave at once and return on failure.
- */
+/** Boards new since the reader last viewed them, five until asked. Command
+ * and shift clicks pick rows; a right click marks the pick read. */
 function UnreadBoards({
   boards,
   current,
