@@ -12,6 +12,9 @@
     <a href="https://github.com/devdotfast/whiteboard/wiki/Roadmap">Roadmap</a> ·
     <a href="https://discord.gg/wYvd2cpMQg">Discord</a>
   </p>
+  <p>
+    <a href="https://news.ycombinator.com/item?id=49833867"><img src="https://hackergit.org/badge/devdotfast/whiteboard.svg" alt="Hacker News" height="20"></a>
+  </p>
 </div>
 
 Whiteboard is an open-source desktop app where humans and agents can architect software together in a common workspace.
