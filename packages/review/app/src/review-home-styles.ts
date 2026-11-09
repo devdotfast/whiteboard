@@ -182,7 +182,7 @@ export const styles = stylex.create({
     isolation: "isolate",
     display: "grid",
     gridTemplateColumns: {
-      default: "16px 20px minmax(0, 1fr) 64px 88px",
+      default: "16px 20px minmax(0, 1fr) 64px auto 88px",
       [stylex.env.narrow]: "16px 20px minmax(0, 1fr) 64px",
     },
     alignItems: "center",
@@ -360,6 +360,15 @@ export const styles = stylex.create({
     alignItems: "center",
     flexWrap: "wrap",
     gap: space.s12,
+  },
+  host: {
+    display: { default: "block", [stylex.env.narrow]: "none" },
+    maxWidth: "160px",
+    overflow: "hidden",
+    color: tokens.inkFaint,
+    fontSize: fontSize.small,
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
   },
   time: {
     display: { default: "block", [stylex.env.narrow]: "none" },

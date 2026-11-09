@@ -1467,6 +1467,12 @@ function ReviewHomeBody({
                               }
                             />
                           </span>
+                          <span
+                            title={review.host}
+                            {...stylex.props(styles.host)}
+                          >
+                            {review.host}
+                          </span>
                           <RowTime
                             review={review}
                             now={now}
