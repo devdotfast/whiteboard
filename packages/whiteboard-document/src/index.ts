@@ -117,6 +117,16 @@ export {
   writableBlockTypes,
 } from "./document.js";
 
+export {
+  type FileLensOptions,
+  type ResolvedLens,
+  changedPath,
+  fileLensMatcher,
+  resolveFileLens,
+  resolveLenses,
+  uncategorizedSources,
+} from "./file-lenses.js";
+
 export { ReviewInputError } from "./input-error.js";
 
 export {

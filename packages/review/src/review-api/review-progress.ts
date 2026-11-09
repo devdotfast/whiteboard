@@ -11,23 +11,20 @@ import {
   UNCATEGORIZED_LENS_ID,
   anchorPins,
   boardRepositoryId,
+  changedPath,
   comparisonKey,
   emptyCoverage,
   fileLineRangeSchema,
   lensSelections,
   patchRows,
   resolveDiffSelection,
+  resolveLenses,
   selectionKey,
   selectionReferences,
 } from "@dev.fast/whiteboard-document";
 import { z } from "zod";
 
 import type { ComparisonCoverage } from "./comparison-coverage.js";
-import {
-  changedPath,
-  resolveFileLens,
-  uncategorizedSources,
-} from "./file-lenses.js";
 import type { LocalReviewData } from "./local-data.js";
 import type { ReviewStore, Snapshot } from "./store.js";
 
@@ -61,7 +58,11 @@ export interface ReviewProgress {
   referenceFiles?: Record<string, Record<string, CoverageFile>>;
   resolvedSelections: Record<string, FileLineRange[]>;
   /** The review's file lenses, then the automatic "Uncategorized changes". */
-  lenses: (DiffLens & { unavailable?: string; pending?: boolean })[];
+  lenses: (DiffLens & {
+    unavailable?: string;
+    unavailableAnchors?: string[];
+    pending?: boolean;
+  })[];
   /** Untracked files a live worktree review leaves out of its comparison. */
   untrackedFiles?: number;
 }
@@ -244,40 +245,17 @@ export async function reviewProgress(
     }
   };
 
-  const lenses: ReviewProgress["lenses"] = await Promise.all(
+  // Explicit ranges use the same pin validation as diagram evidence.
+  await Promise.all(
     (snapshot.lenses ?? []).map(async (authored) => {
-      const lens = { id: authored.id, title: authored.title };
-
       try {
-        // Explicit ranges use the same pin validation as diagram evidence.
         await Promise.all(
           lensSelections([authored]).map(({ source }) =>
             resolveAvailable(source),
           ),
         );
-
-        const resolved = resolveFileLens(
-          authored,
-          files,
-          fileSources,
-          (source) => resolvedSelections[selectionKey(source)] ?? [],
-        );
-
-        return {
-          ...lens,
-          ...resolved,
-          pending: counting,
-          unavailable:
-            counting || resolved.fileCount
-              ? undefined
-              : "No files match these targets",
-        };
       } catch {
-        return {
-          ...lens,
-          sources: [],
-          unavailable: "Source links need updating at these pins",
-        };
+        /* resolveLenses reports a lens whose anchors don't parse. */
       }
     }),
   );
@@ -296,26 +274,33 @@ export async function reviewProgress(
     }),
   );
 
-  const uncategorized = counting
-    ? []
-    : uncategorizedSources(
-        files,
-        lenses
-          .filter((lens) => !lens.unavailable)
-          .flatMap((lens) => lens.sources),
-      );
-
-  lenses.push({
-    id: UNCATEGORIZED_LENS_ID,
-    title: "Uncategorized changes",
-    sources: uncategorized,
-    wholeFiles: false,
-    fileCount: new Set(uncategorized.map(changedPath(files))).size,
-    pending: counting,
-    unavailable:
-      counting || uncategorized.length
+  const resolved = resolveLenses(
+    snapshot.lenses ?? [],
+    files,
+    fileSources,
+    (source) =>
+      unavailableSelections[selectionKey(source)]
         ? undefined
-        : "All changed lines are covered by lenses",
+        : (resolvedSelections[selectionKey(source)] ?? []),
+    { nocase: process.platform === "darwin" || process.platform === "win32" },
+  );
+
+  // A partial count neither leaves a lens empty nor covers every line yet.
+  const lenses = resolved.map((lens) => {
+    if (!counting) return { ...lens, pending: false };
+
+    if (lens.id === UNCATEGORIZED_LENS_ID)
+      return {
+        ...lens,
+        sources: [],
+        fileCount: 0,
+        unavailable: undefined,
+        pending: true,
+      };
+
+    return lens.fileCount === undefined
+      ? { ...lens, pending: true }
+      : { ...lens, unavailable: undefined, pending: true };
   });
 
   const progress: ReviewProgress = {
