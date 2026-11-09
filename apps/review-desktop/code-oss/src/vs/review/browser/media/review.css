@@ -1714,7 +1714,7 @@ body
   display: none;
 }
 
-/* Another board in the project changed since it was last viewed. */
+/* A mark on a tab's icon. */
 .monaco-workbench .review-sidebar-tab-badge {
   position: absolute;
   top: -2px;
