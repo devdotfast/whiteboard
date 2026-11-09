@@ -38,6 +38,16 @@ it("matches glob segments case-insensitively only when asked", () => {
   ).toBe(true);
 });
 
+it("compiles a pattern with many brace pairs quickly and keeps ordinary braces working", () => {
+  const started = performance.now();
+  const matches = fileLensMatcher([`src/${"{a,b}".repeat(17)}`]);
+
+  expect(matches({ path: `src/${"a".repeat(17)}` })).toBe(true);
+  expect(matches({ path: "src/main.ts" })).toBe(false);
+  expect(performance.now() - started).toBeLessThan(1000);
+  expect(fileLensMatcher(["src/{a,b}.ts"])({ path: "src/a.ts" })).toBe(true);
+});
+
 it("keeps a renamed file in a group matching either side of the rename", () => {
   const file = { path: "guide/intro.md", previousPath: "docs/intro.md" };
   expect(fileLensMatcher(["docs/**"])(file)).toBe(true);
