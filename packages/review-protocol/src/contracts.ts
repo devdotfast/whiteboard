@@ -1140,6 +1140,8 @@ export interface ReviewCanvasUpdateHost {
   onDidChange(listener: () => void): ReviewDisposable;
   /** Restarts into the update, or opens the package manager instructions. */
   apply(): void;
+  /** Hides this update everywhere until a newer one arrives. */
+  dismiss(): void;
 }
 
 /** The Release notes tab: every Whiteboard release. */
