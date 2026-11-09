@@ -15,8 +15,6 @@ import { subtractIntervals, unionIntervals } from "./intervals.js";
 import { type LensSource, anchorSelection } from "./lens-selection.js";
 import type { FileLineRange } from "./source.js";
 
-const BRACE_EXPAND_MAX = 256;
-
 export interface FileLensOptions {
   /** Match paths case-insensitively, as on macOS and Windows. */
   nocase?: boolean;
@@ -186,14 +184,14 @@ export function fileLensMatcher(
     const normalized = pattern.startsWith("./") ? pattern.slice(2) : pattern;
 
     const glob = new Minimatch(normalized, {
-      nocase: options?.nocase ?? false,
+      nocase: options?.nocase,
       windowsPathsNoEscape: true,
       nonegate: true,
       nocomment: true,
       optimizationLevel: 2,
       platform: "linux",
       nocaseMagicOnly: true,
-      braceExpandMax: BRACE_EXPAND_MAX,
+      braceExpandMax: 256,
     });
 
     return (path: string) => path === normalized || glob.match(path);

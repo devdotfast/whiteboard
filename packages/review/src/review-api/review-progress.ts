@@ -1,6 +1,5 @@
 import {
   type CoverageFile,
-  type DiffLens,
   type FileLineRange,
   type LensSource,
   type Pins,
@@ -57,11 +56,7 @@ export interface ReviewProgress {
   referenceFiles?: Record<string, Record<string, CoverageFile>>;
   resolvedSelections: Record<string, FileLineRange[]>;
   /** The review's file lenses, then the automatic "Uncategorized changes". */
-  lenses: (DiffLens & {
-    unavailable?: string;
-    unavailableAnchors?: string[];
-    pending?: boolean;
-  })[];
+  lenses: (ResolvedLens & { pending?: boolean })[];
   /** Untracked files a live worktree review leaves out of its comparison. */
   untrackedFiles?: number;
 }
@@ -313,14 +308,11 @@ export function pendingLenses(
 
     if (!counting) return { ...lens, pending: false };
 
-    return lens.id === UNCATEGORIZED_LENS_ID
-      ? {
-          ...lens,
-          sources: [],
-          fileCount: 0,
-          unavailable: undefined,
-          pending: true,
-        }
-      : { ...lens, unavailable: undefined, pending: true };
+    return {
+      ...lens,
+      ...(lens.id === UNCATEGORIZED_LENS_ID && { sources: [], fileCount: 0 }),
+      unavailable: undefined,
+      pending: true,
+    };
   });
 }

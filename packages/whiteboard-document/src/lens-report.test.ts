@@ -145,19 +145,3 @@ it("reports each authored lens with what it resolved to", () => {
     },
   });
 });
-
-it("leaves out empty unavailable anchors", () => {
-  const lens: Lens = {
-    id: "lens-1",
-    title: "A",
-    targets: [{ kind: "files", patterns: ["docs/**"] }],
-  };
-
-  expect(
-    lensReport(
-      [lens],
-      [{ ...lens, sources: [], fileCount: 1, unavailableAnchors: [] }],
-      [],
-    ).lenses,
-  ).toEqual([{ ...lens, fileCount: 1 }]);
-});

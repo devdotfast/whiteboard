@@ -122,14 +122,8 @@ export const editResultSchema = z.object({
 
 export type EditResult = z.infer<typeof editResultSchema>;
 
-/** The server sets the author from the caller's token. */
-export const lensEditRequestSchema = z.object({
+export const lensEditRequestSchema = editRequestSchema.extend({
   edit: lensEditSchema,
-  /** The head the caller last saw: a different head is refused. */
-  baseSeq: z.number().int().nonnegative().optional(),
-  activityId: z.string().min(1).optional(),
-  /** Idempotency key: a retry with the same id gets the first answer. */
-  requestId: z.string().min(1).max(128).optional(),
 });
 
 export type LensEditRequest = z.infer<typeof lensEditRequestSchema>;

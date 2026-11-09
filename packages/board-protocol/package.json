@@ -26,7 +26,7 @@
   "scripts": {
     "build": "tsdown",
     "prepack": "pnpm run build",
-    "test": "vitest run --config vitest.config.ts",
+    "test": "vitest run",
     "typecheck": "pnpm -w exec tsc -p packages/board-protocol/tsconfig.json --noEmit"
   },
   "dependencies": {

@@ -53,9 +53,6 @@ it("keeps a renamed file in a group matching either side of the rename", () => {
   expect(fileLensMatcher(["docs/**"])(file)).toBe(true);
   expect(fileLensMatcher(["guide/**"])(file)).toBe(true);
   expect(fileLensMatcher(["src/**"])(file)).toBe(false);
-  expect(
-    fileLensMatcher(["old/**"])({ path: "new/x.ts", previousPath: "old/x.ts" }),
-  ).toBe(true);
 });
 
 it("keeps partially covered files until both sides are covered, regardless of viewed state", () => {

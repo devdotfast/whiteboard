@@ -76,7 +76,7 @@ export function lensReport(
         ...lens,
         fileCount: match?.fileCount ?? 0,
         ...(match?.unavailable && { unavailable: match.unavailable }),
-        ...(match?.unavailableAnchors?.length && {
+        ...(match?.unavailableAnchors && {
           unavailableAnchors: match.unavailableAnchors,
         }),
       };

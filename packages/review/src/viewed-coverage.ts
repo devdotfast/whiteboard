@@ -1,22 +1,13 @@
 import { z } from "zod";
 
 export {
-  type ChangeCounts,
-  type Coverage,
   type CoverageFile,
   type CoverageProgress,
-  type LineInterval,
-  changeCounts,
   coverageProgress,
   coverageSources,
   emptyCoverage,
-  intersectIntervals,
   mergeCoverageProgress,
   scopedCoverage,
-  sourcesForFile,
-  subtractIntervals,
-  unionIntervals,
-  updateCoverage,
 } from "@dev.fast/whiteboard-document";
 
 export const coverageSchema = z.object({
