@@ -1,6 +1,6 @@
 {
   "name": "@dev.fast/board-protocol",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "Wire contract between a hosted whiteboard board server and its clients.",
   "license": "MIT",
   "repository": {
