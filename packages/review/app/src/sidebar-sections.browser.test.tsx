@@ -53,8 +53,7 @@ const mount = async (initial: ReviewSidebarSectionProps) => {
     handle = mountReviewSidebarSection(container, initial);
   });
 
-  /** Each row's text, a child's indented under its parent; a changed
-   * board's ends in "•". */
+  /** Each row's text, a child's indented under its parent. */
   const rows = () =>
     [...container.querySelectorAll<HTMLElement>("li")].map((row) => {
       const main = [
@@ -62,9 +61,8 @@ const mount = async (initial: ReviewSidebarSectionProps) => {
       ].at(-1)!;
 
       const nested = row.parentElement!.closest("li") ? "  " : "";
-      const changed = main.querySelector("[data-changed]") ? " •" : "";
 
-      return nested + main.textContent + changed;
+      return nested + main.textContent;
     });
 
   const click = (selector: string) =>
@@ -206,12 +204,7 @@ it("shows the open board's family with its place, the boards opened last, and a 
       }),
       board({ reviewId: "s1", title: "Step 1", parentId: "plan" }),
       board({ reviewId: "s2", title: "Step 2", parentId: "plan" }),
-      board({
-        reviewId: "s3",
-        title: "Step 3",
-        parentId: "plan",
-        changed: true,
-      }),
+      board({ reviewId: "s3", title: "Step 3", parentId: "plan" }),
       ...Array.from({ length: 6 }, (_, index) =>
         board({
           reviewId: `b${index + 1}`,
@@ -231,7 +224,7 @@ it("shows the open board's family with its place, the boards opened last, and a 
       "Plan",
       "  Step 1",
       "  Step 2",
-      "  Step 3 •",
+      "  Step 3",
     ]),
   );
   expect(document.body.textContent).toContain("This board2 of 3");

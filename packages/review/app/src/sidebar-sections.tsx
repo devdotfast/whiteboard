@@ -34,7 +34,6 @@ import {
 
 import { AddChildWhiteboard } from "./add-child-whiteboard";
 import { createCanvasQueryClient } from "./canvas-query";
-import { ChangedBadge } from "./changed-badge";
 import { CommitChanges, CommitPicker } from "./commit-picker";
 import { countLabel } from "./format";
 import { LensProgress, LensRows } from "./lens-list";
@@ -59,7 +58,6 @@ import {
   cappedTree,
   isUnread,
   recentTree,
-  showsChanged,
   unreadTree,
   whiteboardTree,
 } from "./whiteboard-tree";
@@ -195,7 +193,6 @@ function BoardRow({
   nested = false,
   recent = false,
   expanded,
-  changed = Boolean(board.changed) && board.reviewId !== current,
   holdsCurrent = false,
   selected = false,
   parentTitle,
@@ -213,7 +210,6 @@ function BoardRow({
   selected?: boolean;
   /** A parent's state; undefined for a board without children. */
   expanded?: boolean;
-  changed?: boolean;
   /** A collapsed parent whose child is open takes the open row's tint. */
   holdsCurrent?: boolean;
   /** In search results, a child's parent, named before it. */
@@ -303,7 +299,6 @@ function BoardRow({
                 current={isCurrent}
               />
             )}
-            {changed ? <ChangedBadge /> : null}
           </span>
           <span
             {...stylex.props(styles.rowText, newChild && styles.textWithAction)}
@@ -788,7 +783,6 @@ function BoardBranch({
             ? expanded
             : undefined
         }
-        changed={showsChanged(branch, current, !expanded)}
         holdsCurrent={
           !expanded &&
           branch.children.some((child) => child.reviewId === current)
