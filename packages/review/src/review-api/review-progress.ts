@@ -5,6 +5,7 @@ import {
   type Lens,
   type LensSource,
   type Pins,
+  type ResolvedLens,
   ReviewInputError,
   SelectionUnavailableError,
   type SelectionUnavailableReason,
@@ -274,34 +275,19 @@ export async function reviewProgress(
     }),
   );
 
-  const resolved = resolveLenses(
-    snapshot.lenses ?? [],
-    files,
-    fileSources,
-    (source) =>
-      unavailableSelections[selectionKey(source)]
-        ? undefined
-        : (resolvedSelections[selectionKey(source)] ?? []),
-    { nocase: process.platform === "darwin" || process.platform === "win32" },
+  const lenses = pendingLenses(
+    resolveLenses(
+      snapshot.lenses ?? [],
+      files,
+      fileSources,
+      (source) =>
+        unavailableSelections[selectionKey(source)]
+          ? undefined
+          : (resolvedSelections[selectionKey(source)] ?? []),
+      { nocase: process.platform === "darwin" || process.platform === "win32" },
+    ),
+    counting,
   );
-
-  // A partial count neither leaves a lens empty nor covers every line yet.
-  const lenses = resolved.map((lens) => {
-    if (!counting) return { ...lens, pending: false };
-
-    if (lens.id === UNCATEGORIZED_LENS_ID)
-      return {
-        ...lens,
-        sources: [],
-        fileCount: 0,
-        unavailable: undefined,
-        pending: true,
-      };
-
-    return lens.fileCount === undefined
-      ? { ...lens, pending: true }
-      : { ...lens, unavailable: undefined, pending: true };
-  });
 
   const progress: ReviewProgress = {
     complete: !counting && !pendingSources.size,
@@ -317,6 +303,28 @@ export async function reviewProgress(
   if (untrackedFiles) progress.untrackedFiles = untrackedFiles;
 
   return progress;
+}
+
+/** A lens whose anchors threw has no count to wait for. */
+export function pendingLenses(
+  lenses: readonly ResolvedLens[],
+  counting: boolean,
+): ReviewProgress["lenses"] {
+  return lenses.map((lens) => {
+    if (lens.fileCount === undefined) return lens;
+
+    if (!counting) return { ...lens, pending: false };
+
+    return lens.id === UNCATEGORIZED_LENS_ID
+      ? {
+          ...lens,
+          sources: [],
+          fileCount: 0,
+          unavailable: undefined,
+          pending: true,
+        }
+      : { ...lens, unavailable: undefined, pending: true };
+  });
 }
 
 /** The most files an uncategorized report names; the rest are counted. */
