@@ -286,13 +286,10 @@ it("resolves each lens in order, dropping anchors it cannot resolve, then what t
   expect(uncategorized).toEqual({
     id: UNCATEGORIZED_LENS_ID,
     title: "Uncategorized changes",
-    sources: uncategorizedSources(files, [covered]),
+    sources: [{ ...covered, fromLine: 4, toLine: 6 }],
     fileCount: 1,
     wholeFiles: false,
   });
-  expect(uncategorized!.sources).toEqual([
-    { ...covered, fromLine: 4, toLine: 6 },
-  ]);
 
   expect(
     resolveLenses(

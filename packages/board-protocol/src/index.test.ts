@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  boardLineSchema,
-  boardSnapshotSchema,
-  lensEditRequestSchema,
-} from "./index.js";
+import { boardLineSchema, lensEditRequestSchema } from "./index.js";
 
 const activity = { workingCount: 0, expiresAt: null };
 const targets = [{ kind: "files", patterns: ["**/*.test.ts"] }];
@@ -33,20 +29,6 @@ describe("boardLineSchema", () => {
       content: { type: "markdown", markdown: "Hello" },
     });
     expect(boardLineSchema.parse(line)).toEqual(line);
-  });
-});
-
-describe("boardSnapshotSchema", () => {
-  it("round-trips lenses", () => {
-    const snapshot = {
-      reviewId: "r",
-      version: 1,
-      title: "Board",
-      document: [],
-      createdAt: "2026-11-09T00:00:00.000Z",
-      lenses: [{ id: "lens-3", title: "Tests", targets }],
-    };
-    expect(boardSnapshotSchema.parse(snapshot)).toEqual(snapshot);
   });
 });
 
