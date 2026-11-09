@@ -4,23 +4,18 @@
  *--------------------------------------------------------------------------------------------*/
 
 /**
- * Review's update surface: two toasts, and commands to check on demand and to
- * show the release notes.
+ * Review's update notices and commands to check on demand and to show the
+ * release notes. The canvas update pill announces a pending update; this
+ * records it and confirms once it has landed.
  *
  * Review deliberately omits the stock `workbench/contrib/update` — its title bar
- * entry depends on the chat service, which Review does not register. This is the
- * whole replacement: tell the reader when an update is waiting on a restart, and
- * confirm once it has landed.
- *
- * Linux announces an available package and opens system update instructions.
- * Squirrel on macOS installs a staged update whenever the app quits, with or without the
- * toast, so the prompt is an invitation to restart now, not a gate on updating.
+ * entry depends on the chat service, which Review does not register.
  */
 
 import { localize, localize2 } from '../../../nls.js';
 import { toAction } from '../../../base/common/actions.js';
 import { Disposable } from '../../../base/common/lifecycle.js';
-import { isLinux, isMacintosh } from '../../../base/common/platform.js';
+import { isMacintosh } from '../../../base/common/platform.js';
 import Severity from '../../../base/common/severity.js';
 import { Action2, registerAction2 } from '../../../platform/actions/common/actions.js';
 import { ICommandService } from '../../../platform/commands/common/commands.js';
@@ -28,7 +23,7 @@ import { IConfigurationService } from '../../../platform/configuration/common/co
 import type { ServicesAccessor } from '../../../platform/instantiation/common/instantiation.js';
 import { IMainProcessService } from '../../../platform/ipc/common/mainProcessService.js';
 import { ILogService } from '../../../platform/log/common/log.js';
-import { INotificationService, type INotificationHandle } from '../../../platform/notification/common/notification.js';
+import { INotificationService } from '../../../platform/notification/common/notification.js';
 import { IOpenerService } from '../../../platform/opener/common/opener.js';
 import { IProductService } from '../../../platform/product/common/productService.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../platform/storage/common/storage.js';
@@ -52,16 +47,12 @@ import {
 	decideUpdateNotice,
 	parseStagedUpdate,
 	serializeStagedUpdate,
-	shouldPromptForUpdate,
 	stagedUpdateFromReady,
 	supersedesStagedUpdate,
-	type IReviewStagedUpdate,
 } from '../../common/reviewUpdateNotice.js';
 
 /** The update downloaded and waiting for a restart. */
 const STAGED_UPDATE_STORAGE_KEY = 'review.update.staged.v1';
-/** Target commit the reader asked not to be prompted about again. */
-const SKIPPED_UPDATE_STORAGE_KEY = 'review.update.skipped.v1';
 /** Failed update attempt that Review already announced. */
 const FAILED_UPDATE_NOTICE_STORAGE_KEY = 'review.update.failedNotice.v1';
 
@@ -69,10 +60,6 @@ class ReviewUpdateNotifications extends Disposable {
 
 	static readonly ID = 'review.update.notifications';
 
-	/** The visible "ready to install" toast, kept so a re-fire cannot stack duplicates. */
-	private readyHandle: INotificationHandle | undefined;
-	/** Which commit `readyHandle` is about. */
-	private readyCommit: string | undefined;
 	private announcedReadOnlyVolume = false;
 	private announcedAuthorizationFailure = false;
 
@@ -152,8 +139,6 @@ class ReviewUpdateNotifications extends Disposable {
 			return;
 		}
 
-		// The update landed, so any skip recorded against it is spent.
-		this.storageService.remove(SKIPPED_UPDATE_STORAGE_KEY, StorageScope.APPLICATION);
 		this.logService.info(`[WhiteboardUpdate] running the staged update (${this.productService.commit})`);
 		const version = this.productService.reviewVersion ?? notice.productVersion;
 		if (version && this.configurationService.getValue<boolean>(REVIEW_SHOW_RELEASE_NOTES_SETTING) !== false) {
@@ -172,15 +157,7 @@ class ReviewUpdateNotifications extends Disposable {
 		});
 	}
 
-	/**
-	 * Linux rests at `AvailableForDownload`; macOS prompts at `Ready`.
-	 *
-	 * On macOS the flow is Idle → CheckingForUpdates → Downloading → Downloaded →
-	 * Ready, and the last two are set back to back, so `Downloaded` is never a
-	 * resting state. `AvailableForDownload` occurs only on a metered connection
-	 * and resolves itself on the next check once off metered, so surfacing it
-	 * would add a download-progress story for a state that clears on its own.
-	 */
+	/** Warns about macOS install failures and records an update once it is `Ready`. */
 	private onStateChange(state: State): void {
 		if (isMacintosh && state.type === StateType.Idle && isDarwinAuthorizationError(state.error)) {
 			if (!this.announcedAuthorizationFailure) {
@@ -211,24 +188,6 @@ class ReviewUpdateNotifications extends Disposable {
 			}
 			return;
 		}
-		if (isLinux && state.type === StateType.AvailableForDownload) {
-			if (this.readyCommit === state.update.version && this.readyHandle) { return; }
-			this.readyHandle?.close();
-			this.readyCommit = state.update.version;
-			this.readyHandle = this.notificationService.notify({
-				severity: Severity.Info,
-				message: localize('review.update.linuxAvailable', "Whiteboard {0} is available. Update with your system package manager, then reopen Whiteboard.", state.update.productVersion ?? ''),
-				actions: { primary: [toAction({
-					id: 'review.update.instructions', label: localize('review.update.instructions', "Update Instructions"),
-					run: () => this.updateService.downloadUpdate(true),
-				})] },
-			});
-			const handle = this.readyHandle;
-			this._register(handle.onDidClose(() => {
-				if (this.readyHandle === handle) { this.readyHandle = undefined; this.readyCommit = undefined; }
-			}));
-			return;
-		}
 		if (state.type !== StateType.Ready) {
 			return;
 		}
@@ -239,8 +198,6 @@ class ReviewUpdateNotifications extends Disposable {
 			return;
 		}
 
-		// Record before considering the prompt: the update installs on quit even
-		// when skipped, so the post-restart toast must still be able to fire.
 		const staged = parseStagedUpdate(
 			this.storageService.get(STAGED_UPDATE_STORAGE_KEY, StorageScope.APPLICATION),
 		);
@@ -252,60 +209,6 @@ class ReviewUpdateNotifications extends Disposable {
 				StorageTarget.MACHINE,
 			);
 		}
-
-		const skipped = this.storageService.get(SKIPPED_UPDATE_STORAGE_KEY, StorageScope.APPLICATION);
-		if (!shouldPromptForUpdate(next, skipped)) {
-			return;
-		}
-		if (this.readyHandle && this.readyCommit === next.targetCommit) {
-			return;
-		}
-
-		this.showReadyNotification(next);
-	}
-
-	private showReadyNotification(next: IReviewStagedUpdate): void {
-		// A newer update superseded whatever was on screen.
-		this.readyHandle?.close();
-
-		const handle = this.notificationService.notify({
-			severity: Severity.Info,
-			// Waits for a decision rather than expiring unseen.
-			sticky: true,
-			message: next.productVersion
-				? localize('review.update.ready', "Whiteboard {0} is ready to install.", next.productVersion)
-				: localize('review.update.ready.unknownVersion', "A Whiteboard update is ready to install."),
-			actions: {
-				primary: [
-					toAction({
-						id: 'review.update.restart',
-						label: localize('review.update.restart', "Restart to Update"),
-						run: () => {
-							void this.updateService.quitAndInstall();
-						},
-					}),
-					toAction({
-						id: 'review.update.skip',
-						label: localize('review.update.skip', "Skip This Version"),
-						run: () => {
-							this.storageService.store(
-								SKIPPED_UPDATE_STORAGE_KEY,
-								next.targetCommit,
-								StorageScope.APPLICATION,
-								StorageTarget.MACHINE,
-							);
-						},
-					}),
-				],
-			},
-		});
-
-		this.readyHandle = handle;
-		this.readyCommit = next.targetCommit;
-		this._register(handle.onDidClose(() => {
-			this.readyHandle = undefined;
-			this.readyCommit = undefined;
-		}));
 	}
 }
 

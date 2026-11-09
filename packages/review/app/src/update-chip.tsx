@@ -21,7 +21,6 @@ import { useCallback, useState, useSyncExternalStore } from "react";
 import { tickerMotion } from "./ticker-motion.stylex";
 import { tokens } from "./tokens.stylex";
 
-/** Stays while an update waits, after its toast is gone. */
 export function UpdateChip({ host }: { host: ReviewCanvasUpdateHost }) {
   const subscribe = useCallback(
     (listener: () => void) => {
@@ -88,7 +87,7 @@ const styles = stylex.create({
   pill: {
     position: "fixed",
     zIndex: layer.overlay,
-    left: space.s16,
+    right: space.s16,
     bottom: space.s16,
     padding: space.s6,
     paddingLeft: space.s10,
