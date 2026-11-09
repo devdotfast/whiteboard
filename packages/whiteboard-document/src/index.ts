@@ -159,6 +159,12 @@ export {
 } from "./lens-selection.js";
 
 export {
+  type UncategorizedReport,
+  lensReport,
+  uncategorizedReport,
+} from "./lens-report.js";
+
+export {
   type MarkdownNode,
   markdownNodes,
   markdownText,

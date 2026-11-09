@@ -25,9 +25,12 @@ import { errorMessage } from "@dev.fast/trace-core";
 import {
   ReviewInputError,
   type ReviewTarget,
+  type UncategorizedReport,
   boardRepositoryId,
   elements,
+  lensReport,
   scopedCoverage,
+  uncategorizedReport,
 } from "@dev.fast/whiteboard-document";
 import {
   type AgentSelection,
@@ -91,12 +94,9 @@ import {
   reviewRequestOrigin,
 } from "./request-origin.js";
 import {
-  type UncategorizedReport,
   legacyModeSchema,
-  lensReport,
   progressUpdateSchema,
   reviewProgress,
-  uncategorizedReport,
 } from "./review-progress.js";
 import {
   type Author,
@@ -456,12 +456,16 @@ export function createReviewApi(
 
     const snapshot = readReview(context.req.param("id"));
 
+    const progress = await reviewProgress(
+      store,
+      data,
+      snapshot,
+      context.req.raw.signal,
+    );
+
     return context.json({
       version: snapshot.version,
-      ...lensReport(
-        snapshot.lenses ?? [],
-        await reviewProgress(store, data, snapshot, context.req.raw.signal),
-      ),
+      ...lensReport(snapshot.lenses ?? [], progress.lenses, progress.files),
     });
   });
   app.get("/status", async (context) =>
@@ -2155,15 +2159,15 @@ export function createReviewApi(
     if (!data) return {};
 
     try {
+      const progress = await reviewProgress(
+        store,
+        data,
+        store.read(reviewId, version),
+        request.signal,
+      );
+
       return {
-        uncategorized: uncategorizedReport(
-          await reviewProgress(
-            store,
-            data,
-            store.read(reviewId, version),
-            request.signal,
-          ),
-        ),
+        uncategorized: uncategorizedReport(progress.lenses, progress.files),
       };
     } catch (error) {
       return {
