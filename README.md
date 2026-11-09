@@ -13,7 +13,7 @@
     <a href="https://discord.gg/wYvd2cpMQg">Discord</a>
   </p>
   <p>
-    <a href="https://news.ycombinator.com/item?id=49833867"><img src="https://hackergit.org/badge/devdotfast/whiteboard.svg" alt="Hacker News" height="20"></a>
+    <a href="https://news.ycombinator.com/item?id=49833867"><img src="https://hackergit.org/badge/devdotfast/whiteboard.svg?style=rank" alt="Hacker News" width="250" height="55"></a>
   </p>
 </div>
 
