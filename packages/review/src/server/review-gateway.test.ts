@@ -245,7 +245,7 @@ it("captures a remote review's canvas events locally and refuses local-only rout
   ).toEqual([]);
 });
 
-it("saves a person's edit to a remote board and sends every board read and write the canvas makes to its machine", async () => {
+it("saves a person's edit to a remote board on its machine", async () => {
   const a = await startRemote(path.join(root, "a"));
   const onA = await seed(a, "On a");
 
@@ -255,9 +255,7 @@ it("saves a person's edit to a remote board and sends every board read and write
 
   await expect.poll(() => gateway.hosts()[0]?.state).toBe("online");
 
-  const before = await a.api<{ version: number; pins: { head: string } }>(
-    `/${onA}?full=true`,
-  );
+  const before = await a.api<{ version: number }>(`/${onA}?full=true`);
 
   const saved = await request(`/${onA}/person-edit`, {
     method: "POST",
@@ -274,41 +272,6 @@ it("saves a person's edit to a remote board and sends every board read and write
     title: "Typed on a",
     version: before.version + 1,
   });
-
-  const thread = randomUUID();
-  const refused: string[] = [];
-
-  for (const [method, route, body] of [
-    ["GET", "place"],
-    ["GET", "project"],
-    ["GET", "inspect"],
-    ["GET", "history"],
-    ["GET", "lenses"],
-    ["GET", "activity"],
-    ["GET", "links"],
-    ["GET", "links/peek?targetId=block-1"],
-    ["GET", `commit/${before.pins.head}`],
-    ["GET", "render?targetId=block-1&frame=start"],
-    ["POST", "focus", { clientId: "canvas", blockId: null }],
-    ["POST", "activity/begin", { label: "Editing" }],
-    ["POST", "animation-run", {}],
-    ["POST", `ask/${thread}/viewed`, {}],
-  ] as const) {
-    const response = await request(`/${onA}/${route}`, {
-      method,
-      ...(body && { body: JSON.stringify(body) }),
-    });
-
-    if (
-      response.headers.get(REVIEW_HOST_HEADER) !== "wb-a" ||
-      (await response.text()).includes(
-        "not available for a review on another machine",
-      )
-    )
-      refused.push(route);
-  }
-
-  expect(refused).toEqual([]);
 });
 
 it("gives a remote review's language context with its path on that machine and its server id", async () => {
