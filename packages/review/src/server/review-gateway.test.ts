@@ -88,6 +88,12 @@ it("sends a read, a command and a file request to the machine that owns the revi
   expect(readB.headers.get(REVIEW_HOST_HEADER)).toBe("wb-b");
   expect(await readB.json()).toMatchObject({ title: "On b" });
 
+  const place = await request(`/${onB}/place`);
+  expect(place.headers.get(REVIEW_HOST_HEADER)).toBe("wb-b");
+  expect(await place.json()).toMatchObject({
+    board: { reviewId: onB, title: "On b" },
+  });
+
   const renamed = await request("/commands", {
     method: "POST",
     body: command({ type: "rename", reviewId: onA, title: "Renamed on a" }),
@@ -237,6 +243,35 @@ it("captures a remote review's canvas events locally and refuses local-only rout
       entry.url?.startsWith(`/reviews-api/${reviewId}/`),
     ),
   ).toEqual([]);
+});
+
+it("saves a person's edit to a remote board on its machine", async () => {
+  const a = await startRemote(path.join(root, "a"));
+  const onA = await seed(a, "On a");
+
+  const { request, gateway } = await startGateway([
+    { alias: "wb-a", endpoint: a.endpoint },
+  ]);
+
+  await expect.poll(() => gateway.hosts()[0]?.state).toBe("online");
+
+  const before = await a.api<{ version: number }>(`/${onA}?full=true`);
+
+  const saved = await request(`/${onA}/person-edit`, {
+    method: "POST",
+    body: JSON.stringify({
+      baseVersion: before.version,
+      title: "Typed on a",
+      document: [{ type: "markdown", markdown: "Typed.", clientKey: "m" }],
+    }),
+  });
+
+  expect(saved.status).toBe(200);
+  expect(saved.headers.get(REVIEW_HOST_HEADER)).toBe("wb-a");
+  expect(await a.api(`/${onA}?full=true`)).toMatchObject({
+    title: "Typed on a",
+    version: before.version + 1,
+  });
 });
 
 it("gives a remote review's language context with its path on that machine and its server id", async () => {

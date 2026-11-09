@@ -20,6 +20,7 @@ const REMOTE_VERBS = new Set<ReviewVerbRequest["name"]>([
   "authoringCapabilities",
   "openApiReview",
   "focusWindow",
+  "renderAnimation",
 ]);
 
 export function createGatewayPushes(input: {
@@ -41,7 +42,10 @@ export function createGatewayPushes(input: {
         error: `${request.name} is not available from another machine.`,
       };
 
-    if (request.name === "openApiReview") {
+    if (
+      request.name === "openApiReview" ||
+      request.name === "renderAnimation"
+    ) {
       const refused = await input.claim(remote, request.args.reviewId);
 
       if (refused) return { ok: false, error: refused };
