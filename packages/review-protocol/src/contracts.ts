@@ -578,6 +578,7 @@ export interface ReviewSidebarSectionProps {
   section:
     | "whiteboards"
     | "family"
+    | "unread"
     | "recent"
     | "threads"
     | "commitPicker"
@@ -594,8 +595,12 @@ export interface ReviewSidebarSectionProps {
     project: { id: string; name: string } | null;
     boards: ReviewApiSummary[];
   };
-  /** Recent: every project's boards, from Desktop's catalog. */
+  /** Unread and Recent: every project's boards, from Desktop's catalog. */
   recent?: ReviewApiSummary[];
+  /** Unread: marks a board viewed, as opening it would. */
+  onMarkRead?(reviewId: string): Promise<void>;
+  /** Unread: the host's context menu on a row. */
+  showMenu?(request: ReviewMenuRequest): ReviewDisposable;
   /** Threads: every project's, the board's project, the filter, and the
    * threads open in Ask. */
   threads?: {
@@ -1283,6 +1288,8 @@ export interface ReviewMenuItem {
 
 export interface ReviewMenuRequest {
   anchor: HTMLElement;
+  /** Where a context menu opens; under the anchor without it. */
+  at?: { x: number; y: number };
   items: readonly ReviewMenuItem[];
   onSelect(id: string): void | Promise<void>;
   onHide(): void;

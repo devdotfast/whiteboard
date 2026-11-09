@@ -94,3 +94,15 @@ test("disposing never closes a replacement context view", () => {
   s.menu.dispose();
   assert.equal(s.closed(), 0);
 });
+
+test("a context menu opens at the pointer when the request names a point", () => {
+  const s = setup();
+  assert.equal(s.delegate.getAnchor(), s.request.anchor);
+  const at = { x: 12, y: 34 };
+  const positioned = showReviewCanvasMenu({ showContextMenu: value => { s.delegate = value as IContextMenuDelegate; } }, { ...s.request, at }, () => true, {
+    getContextViewElement: () => ({ classList: { contains: () => false } } as unknown as HTMLElement),
+    hideContextView: () => {},
+  });
+  assert.equal(s.delegate.getAnchor(), at);
+  positioned.dispose();
+});

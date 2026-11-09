@@ -31,4 +31,8 @@ export const listRowStyles = stylex.create({
   current: {
     backgroundColor: tokens.markerTint,
   },
+  // A row picked for a batch action.
+  selected: {
+    backgroundColor: tokens.accentWash,
+  },
 });

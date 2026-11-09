@@ -18,6 +18,7 @@ import { Action2, registerAction2 } from "../../../../platform/actions/common/ac
 import { IInstantiationService, type ServicesAccessor, createDecorator } from "../../../../platform/instantiation/common/instantiation.js";
 import { IHoverService } from "../../../../platform/hover/browser/hover.js";
 import { ICommandService } from "../../../../platform/commands/common/commands.js";
+import { IContextMenuService, IContextViewService } from "../../../../platform/contextview/browser/contextView.js";
 import { IKeybindingService } from "../../../../platform/keybinding/common/keybinding.js";
 import { ILogService } from "../../../../platform/log/common/log.js";
 import { IStorageService, StorageScope, StorageTarget } from "../../../../platform/storage/common/storage.js";
@@ -46,6 +47,7 @@ import { IReviewDesktopConnectionService } from "../../../services/reviewDesktop
 import "../../media/review.css";
 import { loadReviewCanvasAssets } from "../canvas/reviewCanvasAssets.js";
 import { boardOf, keepsSidebar } from "../canvas/reviewCanvasEditorInput.js";
+import { showReviewCanvasMenu } from "../../reviewCanvasMenu.js";
 import { ReviewTooltip } from "../../reviewTooltip.js";
 import { type ReviewSidebarPaneId, ReviewSidebarTabs } from "./reviewSidebarTabs.js";
 import { REVIEW_SIDEBAR_TAB_COMMANDS } from "../../../contrib/tabs/reviewWindowKeys.js";
@@ -169,6 +171,7 @@ export class ReviewSidebarPart extends Part {
 
 	private readonly panes: ReviewSidebarPane[] = [];
 	private readonly lit = new ReviewSidebarTabs((id) => this.offers(id));
+	private unreadBody: HTMLElement | undefined;
 	private recentBody: HTMLElement | undefined;
 	private whiteboardsBody: HTMLElement | undefined;
 	private familyBody: HTMLElement | undefined;
@@ -214,6 +217,8 @@ export class ReviewSidebarPart extends Part {
 		@IHoverService private readonly hoverService: IHoverService,
 		@ICommandService private readonly commandService: ICommandService,
 		@IKeybindingService private readonly keybindingService: IKeybindingService,
+		@IContextMenuService private readonly contextMenuService: IContextMenuService,
+		@IContextViewService private readonly contextViewService: IContextViewService,
 	) {
 		super(Parts.REVIEW_SIDEBAR_PART, { hasTitle: false, borderWidth: () => 0 }, themeService, storage, layoutService);
 		this.threadsFilter = threadsFilterOf(storage.get(REVIEW_SIDEBAR_THREADS_FILTER_KEY, StorageScope.WORKSPACE));
@@ -376,6 +381,8 @@ export class ReviewSidebarPart extends Part {
 		stack.appendChild(this.whiteboardsBody);
 		this.familyBody = $(".review-sidebar-stack-body.review-sidebar-family");
 		stack.appendChild(this.familyBody);
+		this.unreadBody = $(".review-sidebar-stack-body.review-sidebar-unread");
+		stack.appendChild(this.unreadBody);
 		// Recent comes last.
 		this.recentBody = $(".review-sidebar-stack-body.review-sidebar-recent");
 		stack.appendChild(this.recentBody);
@@ -712,8 +719,10 @@ export class ReviewSidebarPart extends Part {
 					if (view) this.emitSurfaceEvent({ event: "showReviewView", view, reviewId: id });
 				});
 			},
-			// Recent spans every project: the catalog Home already keeps.
+			// Unread and Recent span every project: the catalog Home already keeps.
 			recent: [...this.catalog.reviews],
+			onMarkRead: (id) => this.catalog.attention(id, "view"),
+			showMenu: (request) => showReviewCanvasMenu(this.contextMenuService, request, () => this.layoutService.isVisible(Parts.REVIEW_SIDEBAR_PART), this.contextViewService),
 			setupTooltip: this.setupTooltip,
 			onNewWhiteboard: () => void this.commandService.executeCommand(REVIEW_NEW_WHITEBOARD_COMMAND_ID, "sidebar"),
 			onNewChildWhiteboard: (parentId) => openChildWhiteboard(this.catalog, this.tabs, parentId),
@@ -724,6 +733,7 @@ export class ReviewSidebarPart extends Part {
 		const mounts: [ReviewSidebarSectionProps["section"], HTMLElement | undefined][] = reviewId
 			? [
 				["family", this.familyBody],
+				["unread", this.unreadBody],
 				["recent", this.recentBody],
 				["whiteboards", this.whiteboardsBody],
 				["commitPicker", this.commitPicker],
@@ -731,7 +741,7 @@ export class ReviewSidebarPart extends Part {
 				["remaining", this.remaining],
 				["lenses", this.lenses?.body],
 			]
-			: [["recent", this.recentBody]];
+			: [["unread", this.unreadBody], ["recent", this.recentBody]];
 		for (const [section, element] of mounts) {
 			if (!element) continue;
 			const handle = this.handles.get(section);

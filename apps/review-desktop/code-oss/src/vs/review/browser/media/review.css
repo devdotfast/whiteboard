@@ -1806,7 +1806,7 @@ body
   margin-top: 8px;
 }
 
-.monaco-workbench .review-sidebar-stack:has([data-searching]) .review-sidebar-family {
+.monaco-workbench .review-sidebar-stack:has([data-searching]) :is(.review-sidebar-family, .review-sidebar-unread) {
   display: none;
 }
 

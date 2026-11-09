@@ -119,6 +119,33 @@ export function recentTree(
     .sort((left, right) => viewed(right) - viewed(left));
 }
 
+/** New since the reader last viewed it, or never viewed. */
+export function isUnread(board: ReviewApiSummary): boolean {
+  return (
+    board.viewedAt === null ||
+    Date.parse(board.createdAt) > Date.parse(board.viewedAt)
+  );
+}
+
+/** How many boards Unread lists before "Show N more". */
+export const UNREAD_SHOWN = 5;
+
+/** Families with an unread member, newest first. The current family has
+ * its own section. */
+export function unreadTree(
+  boards: readonly ReviewApiSummary[],
+  current: string,
+): WhiteboardBranch[] {
+  const active = boards.filter((board) => !board.trashedAt);
+  const family = boardFamily(active, current);
+
+  return whiteboardTree(active).filter(
+    (branch) =>
+      branch.board.reviewId !== family?.board.reviewId &&
+      [branch.board, ...branch.children].some(isUnread),
+  );
+}
+
 /** Only local, active top-level boards can accept a project child. */
 export function canAddChildWhiteboard(board: ReviewApiSummary): boolean {
   return Boolean(

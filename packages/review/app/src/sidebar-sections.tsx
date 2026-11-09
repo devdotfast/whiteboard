@@ -3,6 +3,7 @@ import { BoardIcon, PullRequestStateIcon } from "@canvas/ui/board-icons";
 import { IconButton, buttonStyles } from "@canvas/ui/button";
 import { CrumbSeparator } from "@canvas/ui/crumbs";
 import { EmptyState } from "@canvas/ui/empty-state";
+import { useEscape } from "@canvas/ui/escape";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { PlusIcon, SearchIcon, StackIcon } from "@canvas/ui/icons";
@@ -12,6 +13,8 @@ import { fieldStyles } from "@canvas/ui/text-field";
 import { TooltipHostContext, useTooltip } from "@canvas/ui/tooltip";
 import {
   type ReviewApiSummary,
+  type ReviewDisposable,
+  type ReviewMenuRequest,
   type ReviewSidebarSectionProps,
   boardIconKind,
   boardTitle,
@@ -37,7 +40,7 @@ import { countLabel } from "./format";
 import { LensProgress, LensRows } from "./lens-list";
 import { boardRowMarker } from "./markers.stylex";
 import { type ReviewTocEntry, headingDepth } from "./review-document-headings";
-import { worktreeLabel } from "./review-home-model";
+import { withChildBoards, worktreeLabel } from "./review-home-model";
 import { StackPill } from "./review-stack-selector";
 import { fontSize, fontWeight, leading, radius, space } from "./scale.stylex";
 import { ThreadsSectionBody } from "./sidebar-threads";
@@ -48,13 +51,16 @@ import {
 } from "./whiteboard-expansion";
 import {
   RECENT_SHOWN,
+  UNREAD_SHOWN,
   type WhiteboardBranch,
   boardFamily,
   canAddChildWhiteboard,
   canExpandWhiteboard,
   cappedTree,
+  isUnread,
   recentTree,
   showsChanged,
+  unreadTree,
   whiteboardTree,
 } from "./whiteboard-tree";
 
@@ -191,16 +197,20 @@ function BoardRow({
   expanded,
   changed = Boolean(board.changed) && board.reviewId !== current,
   holdsCurrent = false,
+  selected = false,
   parentTitle,
   detail,
   onNewChild,
   onToggle,
   onOpen,
+  onContextMenu,
 }: {
   board: ReviewApiSummary;
   current: string;
   nested?: boolean;
   recent?: boolean;
+  /** Picked for a batch action, in Unread. */
+  selected?: boolean;
   /** A parent's state; undefined for a board without children. */
   expanded?: boolean;
   changed?: boolean;
@@ -212,6 +222,7 @@ function BoardRow({
   onNewChild?(parentId: string): Promise<void>;
   onToggle?(): void;
   onOpen(reviewId: string, event: MouseEvent): void;
+  onContextMenu?(reviewId: string, event: MouseEvent<HTMLElement>): void;
 }): ReactElement {
   const [childError, setChildError] = useState("");
   const isCurrent = board.reviewId === current;
@@ -248,6 +259,7 @@ function BoardRow({
   return (
     <>
       <div
+        data-selected={selected ? "" : undefined}
         {...stylex.props(
           boardRowMarker,
           listRowStyles.row,
@@ -258,6 +270,7 @@ function BoardRow({
           nested && styles.nestedRow,
           recent && styles.recentRow,
           (isCurrent || holdsCurrent) && listRowStyles.current,
+          selected && listRowStyles.selected,
         )}
       >
         <BoardDisclosure
@@ -275,6 +288,9 @@ function BoardRow({
             styles.rowMain,
           )}
           onClick={(event) => onOpen(board.reviewId, event)}
+          onContextMenu={
+            onContextMenu && ((event) => onContextMenu(board.reviewId, event))
+          }
         >
           <span {...stylex.props(styles.iconSlot)}>
             {board.children?.length ? (
@@ -497,6 +513,18 @@ function SectionBody(props: ReviewSidebarSectionProps): ReactElement | null {
         onPick={(commit) => props.onPickCommit?.(commit)}
       />
     ) : null;
+
+  if (props.section === "unread")
+    return (
+      <UnreadBoards
+        boards={props.recent ?? props.project?.boards ?? []}
+        current={props.reviewId}
+        onNewChild={props.onNewChildWhiteboard}
+        onOpen={props.onOpenBoard}
+        onMarkRead={props.onMarkRead}
+        showMenu={props.showMenu}
+      />
+    );
 
   if (props.section === "recent")
     return (
@@ -722,17 +750,22 @@ function BoardBranch({
   current,
   expanded,
   recent,
+  selected,
   onNewChild,
   onToggle,
   onOpen,
+  onContextMenu,
 }: {
   branch: WhiteboardBranch;
   current: string;
   expanded: boolean;
   recent?: boolean;
+  /** The boards picked for a batch action, in Unread. */
+  selected?: ReadonlySet<string>;
   onNewChild?(parentId: string): Promise<void>;
   onToggle(): void;
   onOpen(reviewId: string, event: MouseEvent): void;
+  onContextMenu?(reviewId: string, event: MouseEvent<HTMLElement>): void;
 }): ReactElement {
   const parent = branch.children.length > 0;
 
@@ -743,6 +776,8 @@ function BoardBranch({
         onNewChild={onNewChild}
         current={current}
         recent={recent}
+        selected={selected?.has(branch.board.reviewId)}
+        onContextMenu={onContextMenu}
         detail={
           recent
             ? worktreeLabel(branch.board) || branch.board.project?.name
@@ -762,7 +797,13 @@ function BoardBranch({
         onOpen={onOpen}
       />
       {parent && expanded ? (
-        <FamilyChildren family={branch} current={current} onOpen={onOpen} />
+        <FamilyChildren
+          family={branch}
+          current={current}
+          selected={selected}
+          onOpen={onOpen}
+          onContextMenu={onContextMenu}
+        />
       ) : !parent &&
         expanded &&
         onNewChild &&
@@ -785,12 +826,16 @@ function BoardBranch({
 function FamilyChildren({
   family,
   current,
+  selected,
   onOpen,
+  onContextMenu,
 }: {
   family: WhiteboardBranch;
   projectId?: string;
   current: string;
+  selected?: ReadonlySet<string>;
   onOpen(reviewId: string, event: MouseEvent): void;
+  onContextMenu?(reviewId: string, event: MouseEvent<HTMLElement>): void;
 }): ReactElement {
   const scroller = useRef<HTMLDivElement>(null);
   const [more, setMore] = useState({ above: false, below: false });
@@ -863,7 +908,9 @@ function FamilyChildren({
                 board={child}
                 current={current}
                 nested
+                selected={selected?.has(child.reviewId)}
                 onOpen={onOpen}
+                onContextMenu={onContextMenu}
               />
             </li>
           ))}
@@ -879,6 +926,221 @@ function FamilyChildren({
         />
       ) : null}
     </div>
+  );
+}
+
+/** "Show N more" under a capped flat list, and "Show less" once opened. */
+function ShowMoreRow({
+  hidden,
+  showAll,
+  onToggle,
+}: {
+  hidden: number;
+  showAll: boolean;
+  onToggle(): void;
+}): ReactElement | null {
+  if (hidden <= 0) return null;
+
+  return (
+    <li>
+      <button
+        type="button"
+        aria-expanded={showAll}
+        data-show-more=""
+        {...stylex.props(
+          buttonStyles.reset,
+          listRowStyles.row,
+          listRowStyles.wash,
+          styles.treeRow,
+          styles.more,
+        )}
+        onClick={onToggle}
+      >
+        <span {...stylex.props(styles.moreTextFlat)}>
+          {showAll ? "Show less" : `Show ${hidden} more`}
+        </span>
+      </button>
+    </li>
+  );
+}
+
+/**
+ * Boards new since the reader last viewed them, five until asked. Command
+ * and shift clicks pick rows; a right click offers to mark the pick, or the
+ * row under it, read. Marked boards leave at once and return on failure.
+ */
+function UnreadBoards({
+  boards,
+  current,
+  onNewChild,
+  onOpen,
+  onMarkRead,
+  showMenu,
+}: {
+  boards: readonly ReviewApiSummary[];
+  current: string;
+  onNewChild?(parentId: string): Promise<void>;
+  onOpen(reviewId: string, active: boolean): void;
+  onMarkRead?(reviewId: string): Promise<void>;
+  showMenu?(request: ReviewMenuRequest): ReviewDisposable;
+}): ReactElement | null {
+  const [showAll, setShowAll] = useState(false);
+  const { expanded, setExpanded } = useWhiteboardExpansion();
+  const [selected, setSelected] = useState(new Set<string>());
+  const anchor = useRef<string | null>(null);
+  // Boards marked read, by the version marked; a later version shows again.
+  const [read, setRead] = useState(new Map<string, string>());
+  const [error, setError] = useState("");
+  const list = useRef<HTMLUListElement>(null);
+  const menu = useRef<ReviewDisposable | undefined>(undefined);
+
+  useEffect(() => () => menu.current?.dispose(), []);
+
+  useEscape(() => setSelected(new Set()), {
+    enabled: selected.size > 0,
+    within: list,
+  });
+
+  const tree = unreadTree(
+    boards.filter((board) => read.get(board.reviewId) !== board.createdAt),
+    current,
+  );
+
+  if (!tree.length) return null;
+  const shown = showAll ? tree : tree.slice(0, UNREAD_SHOWN);
+  const hidden = tree.length - UNREAD_SHOWN;
+
+  const isExpanded = (branch: WhiteboardBranch) =>
+    expanded(branch.board.project?.id).has(branch.board.reviewId);
+
+  // Rows on screen, in order, for a shift click's range.
+  const rows = shown.flatMap((branch) => [
+    branch.board.reviewId,
+    ...(isExpanded(branch) ? branch.children.map((c) => c.reviewId) : []),
+  ]);
+
+  const pick = (id: string, event: MouseEvent) => {
+    if (event.shiftKey) {
+      const from = Math.max(rows.indexOf(anchor.current ?? id), 0);
+      const to = rows.indexOf(id);
+
+      setSelected(
+        new Set(rows.slice(Math.min(from, to), Math.max(from, to) + 1)),
+      );
+    } else if (event.metaKey || event.ctrlKey) {
+      setSelected((last) => {
+        const next = new Set(last);
+
+        if (!next.delete(id)) next.add(id);
+
+        return next;
+      });
+    } else {
+      setSelected(new Set());
+      onOpen(id, true);
+
+      return;
+    }
+
+    anchor.current = id;
+  };
+
+  async function markRead(chosen: string[]) {
+    if (!onMarkRead) return;
+    const picked = new Set(chosen);
+
+    const targets = withChildBoards(
+      boards.filter((board) => picked.has(board.reviewId)),
+      boards,
+    ).filter(isUnread);
+
+    setSelected(new Set());
+    setError("");
+    setRead(
+      (last) =>
+        new Map([
+          ...last,
+          ...targets.map((board) => [board.reviewId, board.createdAt] as const),
+        ]),
+    );
+    const failed = new Set<string>();
+    const messages: string[] = [];
+
+    await Promise.all(
+      targets.map(async (board) => {
+        try {
+          await onMarkRead(board.reviewId);
+        } catch (cause) {
+          failed.add(board.reviewId);
+          messages.push(cause instanceof Error ? cause.message : String(cause));
+        }
+      }),
+    );
+
+    if (!failed.size) return;
+    setRead((last) => new Map([...last].filter(([id]) => !failed.has(id))));
+
+    setError(
+      `Could not mark ${countLabel(failed.size, "whiteboard")} read. ${messages.join(" ")}`,
+    );
+  }
+
+  const contextMenu = (id: string, event: MouseEvent<HTMLElement>) => {
+    if (!showMenu || !onMarkRead) return;
+    event.preventDefault();
+
+    // A pick folded out of sight is not a target.
+    const targets = selected.has(id)
+      ? rows.filter((row) => selected.has(row))
+      : [id];
+
+    menu.current?.dispose();
+
+    menu.current = showMenu({
+      anchor: event.currentTarget,
+      at: { x: event.clientX, y: event.clientY },
+      items: [{ id: "read", label: "Mark as read" }],
+      onSelect: () => markRead(targets),
+      onHide: () => {},
+    });
+  };
+
+  return (
+    <>
+      <GroupHeader title="Unread" count={String(tree.length)} />
+      <ul ref={list} aria-label="Unread" {...stylex.props(styles.list)}>
+        {shown.map((branch) => (
+          <BoardBranch
+            key={branch.board.reviewId}
+            branch={branch}
+            onNewChild={onNewChild}
+            current={current}
+            expanded={isExpanded(branch)}
+            recent
+            selected={selected}
+            onToggle={() =>
+              setExpanded(
+                branch.board.project?.id,
+                branch.board.reviewId,
+                !isExpanded(branch),
+              )
+            }
+            onOpen={pick}
+            onContextMenu={contextMenu}
+          />
+        ))}
+        <ShowMoreRow
+          hidden={hidden}
+          showAll={showAll}
+          onToggle={() => setShowAll(!showAll)}
+        />
+      </ul>
+      {error ? (
+        <p role="alert" {...stylex.props(textStyles.error, styles.rowError)}>
+          {error}
+        </p>
+      ) : null}
+    </>
   );
 }
 
@@ -925,27 +1187,11 @@ function RecentBoards({
             onOpen={onOpen}
           />
         ))}
-        {hidden > 0 ? (
-          <li>
-            <button
-              type="button"
-              aria-expanded={showAll}
-              data-show-more=""
-              {...stylex.props(
-                buttonStyles.reset,
-                listRowStyles.row,
-                listRowStyles.wash,
-                styles.treeRow,
-                styles.more,
-              )}
-              onClick={() => setShowAll(!showAll)}
-            >
-              <span {...stylex.props(styles.moreTextFlat)}>
-                {showAll ? "Show less" : `Show ${hidden} more`}
-              </span>
-            </button>
-          </li>
-        ) : null}
+        <ShowMoreRow
+          hidden={hidden}
+          showAll={showAll}
+          onToggle={() => setShowAll(!showAll)}
+        />
       </ul>
     </>
   );

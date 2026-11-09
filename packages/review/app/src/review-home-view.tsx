@@ -80,7 +80,6 @@ import {
   homeFacetValues,
   homeGroups,
   isHomeFacet,
-  isUnread,
   matchesHomeFilters,
   mergeChipOrder,
   removeHomeChip,
@@ -106,6 +105,7 @@ import {
   type WhiteboardBranch,
   canAddChildWhiteboard,
   canExpandWhiteboard,
+  isUnread,
   showsChanged,
 } from "./whiteboard-tree";
 
