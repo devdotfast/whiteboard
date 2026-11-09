@@ -27,6 +27,7 @@ import {
   type ReviewTarget,
   boardRepositoryId,
   elements,
+  scopedCoverage,
 } from "@dev.fast/whiteboard-document";
 import {
   type AgentSelection,
@@ -63,7 +64,6 @@ import {
 } from "@review/sharing/host.js";
 import { forgetSharedCommits } from "@review/sharing/repository.js";
 import type { ReviewSessionAgent } from "@review/ui-telemetry-events.js";
-import { scopedCoverage } from "@review/viewed-coverage.js";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 

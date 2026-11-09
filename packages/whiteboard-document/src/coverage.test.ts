@@ -6,7 +6,7 @@ import {
   mergeCoverageProgress,
   scopedCoverage,
   updateCoverage,
-} from "./viewed-coverage";
+} from "./coverage.js";
 
 const file: CoverageFile = {
   path: "new.ts",

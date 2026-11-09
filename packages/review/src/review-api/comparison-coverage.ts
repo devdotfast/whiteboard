@@ -9,20 +9,18 @@ import {
 } from "@dev.fast/review-protocol";
 import {
   type AlignmentRow,
-  type FileLineRange,
-  type Pins,
-  patchRows,
-} from "@dev.fast/whiteboard-document";
-import { parseUnifiedPatch } from "@review/unified-diff.js";
-import {
   type Coverage,
   type CoverageFile,
+  type FileLineRange,
   type LineInterval,
+  type Pins,
   emptyCoverage,
   intersectIntervals,
+  patchRows,
   subtractIntervals,
   unionIntervals,
-} from "@review/viewed-coverage.js";
+} from "@dev.fast/whiteboard-document";
+import { parseUnifiedPatch } from "@review/unified-diff.js";
 
 import type { LocalReviewData } from "./local-data.js";
 

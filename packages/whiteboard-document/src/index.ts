@@ -18,6 +18,21 @@ export { animationCode } from "./blocks/animation.js";
 
 export { label } from "./blocks/definition.js";
 
+export {
+  type ChangeCounts,
+  type Coverage,
+  type CoverageFile,
+  type CoverageProgress,
+  changeCounts,
+  coverageProgress,
+  coverageSources,
+  emptyCoverage,
+  mergeCoverageProgress,
+  scopedCoverage,
+  sourcesForFile,
+  updateCoverage,
+} from "./coverage.js";
+
 export type { Definitions } from "./blocks/index.js";
 
 export {
@@ -104,7 +119,12 @@ export {
 
 export { ReviewInputError } from "./input-error.js";
 
-export { type LineInterval, unionIntervals } from "./intervals.js";
+export {
+  type LineInterval,
+  intersectIntervals,
+  subtractIntervals,
+  unionIntervals,
+} from "./intervals.js";
 
 export {
   type AlignmentRow,

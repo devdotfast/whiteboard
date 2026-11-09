@@ -1,17 +1,15 @@
 import {
+  type CoverageFile,
   type FileLineRange,
   type Lens,
   type LensSource,
   anchorSelection,
-} from "@dev.fast/whiteboard-document";
-import {
-  type CoverageFile,
   coverageSources,
   scopedCoverage,
   sourcesForFile,
   subtractIntervals,
   unionIntervals,
-} from "@review/viewed-coverage.js";
+} from "@dev.fast/whiteboard-document";
 import { Minimatch } from "minimatch";
 
 /** Subtract authored coverage, independently of viewed state. */

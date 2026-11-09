@@ -1,4 +1,5 @@
 import {
+  type CoverageFile,
   type DiffLens,
   type FileLineRange,
   type Lens,
@@ -11,6 +12,7 @@ import {
   anchorPins,
   boardRepositoryId,
   comparisonKey,
+  emptyCoverage,
   fileLineRangeSchema,
   lensSelections,
   patchRows,
@@ -18,7 +20,6 @@ import {
   selectionKey,
   selectionReferences,
 } from "@dev.fast/whiteboard-document";
-import { type CoverageFile, emptyCoverage } from "@review/viewed-coverage.js";
 import { z } from "zod";
 
 import type { ComparisonCoverage } from "./comparison-coverage.js";
