@@ -1,0 +1,22 @@
+{
+  "name": "@dev.fast/animation-lab",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Playground for the new animation block: a plain React component against fixture data, hot reloaded in a browser tab.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5180 --strictPort",
+    "typecheck": "pnpm -w exec tsc --noEmit -p packages/animation-lab"
+  },
+  "dependencies": {
+    "react": "19.2.5",
+    "react-dom": "19.2.5",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.1",
+    "vite": "8.1.6"
+  }
+}

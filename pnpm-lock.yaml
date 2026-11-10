@@ -211,6 +211,31 @@ importers:
 
   packages/agent-plugins/pi: {}
 
+  packages/animation-lab:
+    dependencies:
+      react:
+        specifier: 19.2.5
+        version: 19.2.5
+      react-dom:
+        specifier: 19.2.5
+        version: 19.2.5(react@19.2.5)
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.6
+    devDependencies:
+      '@types/react':
+        specifier: 19.2.14
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: 19.2.3
+        version: 19.2.3(@types/react@19.2.14)
+      '@vitejs/plugin-react':
+        specifier: 6.0.1
+        version: 6.0.1(vite@8.1.6(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
+      vite:
+        specifier: 8.1.6
+        version: 8.1.6(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0)
+
   packages/board-protocol:
     dependencies:
       '@dev.fast/whiteboard-document':

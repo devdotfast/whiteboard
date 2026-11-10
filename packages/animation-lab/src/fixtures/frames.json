@@ -1,0 +1,61 @@
+{
+  "title": "Read through a cache",
+  "description": "Step through one read, from the client's request to its response.",
+  "stage": {
+    "width": 720,
+    "height": 320
+  },
+  "script": "import { animate } from \"animejs\";\n\n// Four services in a row, drawn as C4 nodes; a token carries the request.\nconst services = [\n  { id: \"client\", kind: \"person\", label: \"Client\", x: 20 },\n  { id: \"api\", kind: \"container\", label: \"API\", tag: \"Container \u00b7 Node.js\", x: 195 },\n  { id: \"cache\", kind: \"database\", label: \"Cache\", tag: \"Database \u00b7 Redis\", x: 370 },\n  { id: \"db\", kind: \"database\", label: \"Orders\", tag: \"Database \u00b7 Postgres\", x: 545 },\n];\n\ndocument.head.insertAdjacentHTML(\"beforeend\", `<style>\n  .token { position: absolute; top: 96px; left: 0; width: 12px; height: 12px; border-radius: 50%; background: light-dark(#2b55e6, #5b7cff); }\n  .token.response { background: light-dark(#1b9a57, #4ed990); }\n  .wire { position: absolute; top: 160px; left: 95px; width: 525px; border-top: 1.5px dashed light-dark(#c8ccd3, #39404d); }\n</style>`);\n\ndocument.body.insertAdjacentHTML(\"beforeend\", '<div class=\"wire\"></div>');\n\nconst nodes = new Map(\n  services.map(({ id, ...service }) => [id, wb.node({ ...service, y: 128, width: 150, height: 64 })]),\n);\n\nconst token = document.createElement(\"div\");\ntoken.className = \"token\";\ndocument.body.append(token);\n\nconst centre = (id) => services.find((service) => service.id === id).x + 75 - 6;\n\n// Where the request is lights up; services it has not reached are dimmed.\nconst show = (at, involved) => {\n  for (const [id, node] of nodes)\n    node.dataset.state = id === at ? \"active\" : involved.includes(id) ? \"default\" : \"dimmed\";\n};\n\nconst reduced = matchMedia(\"(prefers-reduced-motion: reduce)\").matches;\n\n// Each frame names where the token is, which services are involved, and\n// whether it carries the response yet.\nwb.onFrame((frame, { previous }) => {\n  const { at, involved, response } = frame.data;\n\n  show(at, involved);\n  token.classList.toggle(\"response\", response);\n\n  // The first frame, and every frame under reduced motion, just places it.\n  if (!previous || reduced) {\n    token.style.transform = `translateX(${centre(at)}px)`;\n    return;\n  }\n\n  animate(token, { translateX: centre(at), duration: 600, ease: \"inOutQuad\" });\n});\n",
+  "frames": [
+    {
+      "id": "request",
+      "label": "Request",
+      "caption": "The client sends a read to the API.",
+      "data": {
+        "at": "client",
+        "involved": ["client"],
+        "response": false
+      }
+    },
+    {
+      "id": "api",
+      "label": "Check cache",
+      "caption": "The API checks the cache first.",
+      "data": {
+        "at": "api",
+        "involved": ["client", "api"],
+        "response": false
+      }
+    },
+    {
+      "id": "miss",
+      "label": "Cache miss",
+      "caption": "The cache misses, so the read goes on to the database.",
+      "data": {
+        "at": "cache",
+        "involved": ["client", "api", "cache"],
+        "response": false
+      }
+    },
+    {
+      "id": "db",
+      "label": "Database",
+      "caption": "The database returns the row, and the cache keeps a copy.",
+      "data": {
+        "at": "db",
+        "involved": ["client", "api", "cache", "db"],
+        "response": true
+      }
+    },
+    {
+      "id": "response",
+      "label": "Response",
+      "caption": "The API answers the client.",
+      "data": {
+        "at": "client",
+        "involved": ["client", "api", "cache", "db"],
+        "response": true
+      }
+    }
+  ]
+}
