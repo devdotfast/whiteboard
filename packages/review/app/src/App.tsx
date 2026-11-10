@@ -44,6 +44,7 @@ import { DocumentContentsContext } from "./diff-sidebar-folds";
 import { ReviewDiffView } from "./DiffView";
 import { useDocumentEmbedScroll } from "./document-embed-scroll";
 import { documentStyles } from "./document-styles";
+import { HostPassageMarks } from "./host-passages";
 import { useReviewSession } from "./host/review-session";
 import { useKeepPlace } from "./keep-place";
 import { appMarker, detailHostMarker, documentMarker } from "./markers.stylex";
@@ -659,6 +660,10 @@ function ReviewLayoutContent({
                 </ReviewDocumentBoundary>
               </article>
               <AskThreadMarks
+                articleRef={articleRef}
+                revision={documentRevision}
+              />
+              <HostPassageMarks
                 articleRef={articleRef}
                 revision={documentRevision}
               />

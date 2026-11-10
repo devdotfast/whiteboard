@@ -23,6 +23,7 @@ import {
 import { askAnchor } from "./ask-anchor";
 import { copyAgentContext } from "./copy-agent-context";
 import { useReviewDebugSettings } from "./debug-settings";
+import { useHostPassages } from "./host-passages";
 import { useReviewSession } from "./host/review-session";
 import { useNotify } from "./notify";
 import { useReviewDiffFiles } from "./review-diff-files-context";
@@ -82,6 +83,8 @@ export function AgentSelectionProvider({
   children: ReactNode;
 }) {
   const session = useReviewSession();
+  const passages = useHostPassages();
+  const copyRef = !passages?.hideCopyRef;
   const { theme } = useReviewDebugSettings();
   const panels = useOptionalReviewPanelStore();
   // Ask needs a panel to answer in and a host that runs agents (Desktop).
@@ -280,6 +283,7 @@ export function AgentSelectionProvider({
     const keydown = (event: KeyboardEvent) => {
       if (
         selection &&
+        copyRef &&
         event.metaKey &&
         event.shiftKey &&
         !event.altKey &&
@@ -321,7 +325,19 @@ export function AgentSelectionProvider({
     window.addEventListener("keydown", keydown, true);
 
     return () => window.removeEventListener("keydown", keydown, true);
-  }, [selection, copy, select, askAgent, ask]);
+  }, [selection, copy, copyRef, select, askAgent, ask]);
+
+  // A host's own actions are for document text with a place in a block.
+  const text =
+    passages?.actions?.length &&
+    selection?.target.kind === "text" &&
+    selection.range
+      ? { anchor: askAnchor(selection.range), quote: selection.target.quote }
+      : undefined;
+
+  const passage = text?.anchor && { anchor: text.anchor, quote: text.quote };
+
+  const asking = Boolean(askAgents && askAgent);
 
   useEffect(() => {
     if (!selection) return;
@@ -358,6 +374,7 @@ export function AgentSelectionProvider({
       {overlayHost &&
         selection &&
         !selection.quiet &&
+        (asking || copyRef || passage) &&
         copiedSelection !== selectionKey(selection) &&
         createPortal(
           // The toolbar starts at the selection, after a lead that
@@ -422,18 +439,34 @@ export function AgentSelectionProvider({
                   ) : null}
                 </>
               ) : null}
-              <Button
-                variant="ghost"
-                aria-keyshortcuts="Meta+Shift+C"
-                aria-label="Copy ref"
-                onClick={() => void copy()}
-              >
-                <CopyIcon xstyle={iconStyles.inline} />
-                <span>Copy ref</span>
-                <Shortcut aria-hidden="true" xstyle={styles.key}>
-                  ⇧⌘C
-                </Shortcut>
-              </Button>
+              {passage
+                ? passages!.actions!.map((action) => (
+                    <Button
+                      key={action.label}
+                      variant="ghost"
+                      onClick={() => {
+                        action.onSelect(passage);
+                        select(null);
+                      }}
+                    >
+                      {action.label}
+                    </Button>
+                  ))
+                : null}
+              {copyRef ? (
+                <Button
+                  variant="ghost"
+                  aria-keyshortcuts="Meta+Shift+C"
+                  aria-label="Copy ref"
+                  onClick={() => void copy()}
+                >
+                  <CopyIcon xstyle={iconStyles.inline} />
+                  <span>Copy ref</span>
+                  <Shortcut aria-hidden="true" xstyle={styles.key}>
+                    ⇧⌘C
+                  </Shortcut>
+                </Button>
+              ) : null}
             </div>
           </div>,
           selection.anchorContainer ?? overlayHost,

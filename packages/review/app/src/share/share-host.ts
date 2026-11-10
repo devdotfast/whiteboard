@@ -1,3 +1,4 @@
+import type { PassageHost, PassageMark } from "@canvas/host-passages";
 import type { WhiteboardHost } from "@canvas/whiteboard";
 import type {
   ReviewDiffLayout,
@@ -23,6 +24,20 @@ export type SharePeeks = (
 export interface ShareHost extends WhiteboardHost, ReviewDisposable {
   /** Hands the peeks the lines they quote. */
   setSources(code: BoardSources): Promise<void>;
+  /** Replaces the passages washed in the document. */
+  setMarks(marks: readonly PassageMark[]): void;
+}
+
+/** What the embedding page adds to selected text and marks in the document. */
+export interface SharePassages {
+  /** Buttons on the toolbar over selected document text. */
+  selectionActions?: PassageHost["actions"];
+  /** False leaves Copy ref off that toolbar. */
+  copyRef?: boolean;
+  /** A plain click on marked words, with every mark under it. */
+  onMarkClick?: PassageHost["onDidClickMarks"];
+  /** The marks whose words are gone from the document as drawn. */
+  onMarksResolved?: PassageHost["onDidResolveMarks"];
 }
 
 // Shipped beside the package's index.js; Vite serves it from node_modules in
@@ -50,12 +65,16 @@ function listeners<T>() {
 }
 
 /** A read-only host: no requests, no diff, and every verb a no-op. */
-export function shareHost(options: {
-  theme: ReviewTheme;
-  wasmUrl: string;
-  peeks: SharePeeks;
-}): ShareHost {
+export function shareHost(
+  options: {
+    theme: ReviewTheme;
+    wasmUrl: string;
+    peeks: SharePeeks;
+  } & SharePassages,
+): ShareHost {
   let lineNumbers = false;
+  let marks: readonly PassageMark[] = [];
+  const markListeners = listeners<void>();
 
   const layouts: Record<ReviewDiffLayoutScope, ReviewDiffLayout> = {
     diff: "split",
@@ -88,6 +107,18 @@ export function shareHost(options: {
     async setSources(code) {
       await peeks.setSources?.(code);
     },
+    passages: {
+      actions: options.selectionActions,
+      hideCopyRef: options.copyRef === false,
+      marks: () => marks,
+      onDidChangeMarks: (listener) => markListeners.add(listener),
+      onDidClickMarks: options.onMarkClick,
+      onDidResolveMarks: options.onMarksResolved,
+    },
+    setMarks(next) {
+      marks = next;
+      markListeners.fire();
+    },
     diffView: {
       files: async () => [],
       create: () => ({
@@ -110,6 +141,8 @@ export function shareHost(options: {
     },
     ready() {},
     dispose() {
+      markListeners.clear();
+
       for (const set of [
         events,
         lineNumberListeners,
@@ -127,9 +160,10 @@ export function readOnlyHost(
     theme?: ReviewTheme;
     wasmUrl?: string;
     peeks?: SharePeeks;
-  } = {},
+  } & SharePassages = {},
 ): ShareHost {
   return shareHost({
+    ...options,
     theme: options.theme ?? "system",
     wasmUrl: options.wasmUrl ?? libavoidWasmUrl(),
     peeks: options.peeks ?? staticPeeks,
