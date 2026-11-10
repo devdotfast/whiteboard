@@ -12,11 +12,6 @@ import {
 } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 
-const drop = stylex.keyframes({
-  from: { opacity: 0, transform: "translateY(-8px)" },
-  to: { opacity: 1, transform: "translateY(0)" },
-});
-
 const pulse = stylex.keyframes({
   "0%, 100%": { opacity: 1 },
   "50%": { opacity: 0.4 },
@@ -205,10 +200,6 @@ export const styles = stylex.create({
       [stylex.env.reducedMotion]: motion.instant,
     },
     transitionTimingFunction: motion.ease,
-    animationName: { default: drop, [stylex.env.reducedMotion]: "none" },
-    animationDuration: motion.slow,
-    animationTimingFunction: motion.ease,
-    animationFillMode: "backwards",
     // The selection wash includes the outer checkbox gutter.
     "::before": {
       content: "''",
@@ -227,7 +218,6 @@ export const styles = stylex.create({
       transitionTimingFunction: motion.ease,
     },
   },
-  waterfall: (index: number) => ({ animationDelay: `${index * 50}ms` }),
   selected: {
     backgroundColor: tokens.transparent,
     "::before": { backgroundColor: tokens.accentWash },
