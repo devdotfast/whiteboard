@@ -214,9 +214,7 @@ export interface PeekViewer {
   setSources?(code: BoardSources): Promise<void>;
 }
 
-/** Where a passage of document text is: characters `start` to `end` of the
- * text of block `blockId`, which was `text` then. The canvas finds the
- * passage again in a later version unless an edit touched its words. */
+/** Characters `start` to `end` of block `blockId`'s text, which was `text` then. */
 export interface PassageAnchor {
   blockId: string;
   start: number;
@@ -224,28 +222,21 @@ export interface PassageAnchor {
   text: string;
 }
 
-/** Text the reader selected in the document. */
 export interface SelectedPassage {
   anchor: PassageAnchor;
   quote: string;
 }
 
-/** A passage the page keeps something about, such as a comment thread. */
 export interface PassageMark {
   id: string;
   anchor: PassageAnchor;
-  /** Washed more deeply: the one the page's own UI points at. */
+  /** Washed more deeply. */
   active?: boolean;
 }
 
 /** A host that reads and edits nothing. `theme` defaults to "system",
  * `wasmUrl` to the shipped routing wasm and `peeks` to `staticPeeks`.
- * `setSources` hands the peeks the lines they quote.
- *
- * `selectionActions` are buttons on the toolbar over selected document
- * text, and `copyRef: false` leaves Copy ref off it. `setMarks` washes
- * passages in the document; `onMarkClick` hears a plain click on marked
- * words, and `onMarksResolved` which marks' words are gone. */
+ * `setSources` hands the peeks the lines they quote. */
 export declare function readOnlyHost(options?: {
   theme?: "light" | "dark" | "system";
   wasmUrl?: string;
@@ -254,8 +245,10 @@ export declare function readOnlyHost(options?: {
     label: string;
     onSelect(passage: SelectedPassage): void;
   }[];
+  /** False leaves Copy ref off the selection toolbar. */
   copyRef?: boolean;
   onMarkClick?(ids: string[]): void;
+  /** The marks whose words are gone from the document. */
   onMarksResolved?(lost: string[]): void;
 }): WhiteboardHost &
   Disposable & {

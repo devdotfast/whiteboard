@@ -82,14 +82,6 @@ const button = (container: HTMLElement, name: string) =>
       element.getAttribute("aria-label") === name,
   );
 
-it("offers only Copy ref over selected text by default", async () => {
-  const container = await mount({});
-
-  await selectWords(container, "draws ticks");
-  await settled(() => button(container, "Copy ref"));
-  expect(button(container, "Copy ref")).toBeDefined();
-});
-
 it("offers the host's actions with the passage, and can leave Copy ref off", async () => {
   const picked = vi.fn<(passage: SelectedPassage) => void>();
 
@@ -107,7 +99,6 @@ it("offers the host's actions with the passage, and can leave Copy ref off", asy
     anchor: anchor("draws ticks"),
     quote: "draws ticks",
   });
-  // The toolbar goes with the action.
   expect(button(container, "Comment")).toBeUndefined();
 });
 

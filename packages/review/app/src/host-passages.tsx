@@ -14,21 +14,18 @@ import {
 import { type AskAnchor, resolveAskAnchor } from "./ask-anchor";
 import { setCssHighlight } from "./css-highlights";
 
-/** Selected document text, with where it is in its block. */
 export interface SelectedPassage {
   anchor: AskAnchor;
   quote: string;
 }
 
-/** A passage the host keeps something about, such as a comment thread. */
 export interface PassageMark {
   id: string;
   anchor: AskAnchor;
-  /** Washed more deeply: the one the host's own UI points at. */
+  /** Washed more deeply. */
   active?: boolean;
 }
 
-/** What a host adds to selected text and marks in the document. */
 export interface PassageHost {
   /** Buttons on the toolbar over selected document text. */
   actions?: readonly {
@@ -76,7 +73,6 @@ const noMarks = () => NO_MARKS;
 
 const never = () => () => {};
 
-/** How far a press may travel and still be a click. */
 const CLICK_SLOP = 4;
 
 const under = (range: Range, x: number, y: number) =>
@@ -85,16 +81,12 @@ const under = (range: Range, x: number, y: number) =>
       x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom,
   );
 
-/**
- * Washes the host's marks over the document and tells it of clicks on them.
- * A mark's range follows its words, so it is found once per document drawn.
- */
+/** A mark's range follows its words, so it is found once per version drawn. */
 export function HostPassageMarks({
   articleRef,
   revision,
 }: {
   articleRef: RefObject<HTMLElement | null>;
-  /** The rendered document; a new one is searched again. */
   revision: string;
 }): null {
   const host = useHostPassages();

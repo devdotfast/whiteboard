@@ -24,19 +24,13 @@ export type SharePeeks = (
 export interface ShareHost extends WhiteboardHost, ReviewDisposable {
   /** Hands the peeks the lines they quote. */
   setSources(code: BoardSources): Promise<void>;
-  /** Replaces the passages washed in the document. */
   setMarks(marks: readonly PassageMark[]): void;
 }
 
-/** What the embedding page adds to selected text and marks in the document. */
 export interface SharePassages {
-  /** Buttons on the toolbar over selected document text. */
   selectionActions?: PassageHost["actions"];
-  /** False leaves Copy ref off that toolbar. */
   copyRef?: boolean;
-  /** A plain click on marked words, with every mark under it. */
   onMarkClick?: PassageHost["onDidClickMarks"];
-  /** The marks whose words are gone from the document as drawn. */
   onMarksResolved?: PassageHost["onDidResolveMarks"];
 }
 
