@@ -4,6 +4,12 @@
 import type { BlockProps } from "@canvas/blocks";
 import { radius, space } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  PauseIcon,
+  PlayIcon,
+} from "@canvas/ui/icons";
 import { useTooltip } from "@canvas/ui/tooltip";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -18,8 +24,6 @@ import {
 import {
   ControlButton,
   StopCaption,
-  pauseIcon,
-  playIcon,
   timerState,
   timerVars,
 } from "./stage-controls";
@@ -29,16 +33,35 @@ import type {
   StagePlayer,
   StageSend,
 } from "./stage-player";
-import type { StageMessage } from "./stage-protocol";
+import type { StageMessage, StageMove } from "./stage-protocol";
+import { FrameControls } from "./timeline-controls";
 
 const DEFAULT_DURATION = 3000;
+
+// A diagram's step is one caption and a token or two: it holds for less.
+const DIAGRAM_DURATION = 1800;
 
 const sameKeys = (left: readonly string[], right: readonly string[] | null) =>
   right?.length === left.length && left.every((key, i) => key === right[i]);
 
+type AnimationNode = BlockProps<"animation">["node"];
+
+/** What the player reads: an animation's frames and scenarios, or a
+ * diagram's, whose frames may carry moves for its stage. */
+export interface FramesNode {
+  frames: readonly (AnimationNode["frames"][number] & {
+    moves?: StageMove[];
+    focus?: string[];
+  })[];
+  scenarios?: AnimationNode["scenarios"];
+}
+
+/** A diagram's frames (`track`) get the player a diagram's timeline has, a
+ * track of frames under the stage, in place of the strip and the footer. */
 export function useFramePlayer(
-  node: BlockProps<"animation">["node"],
+  node: FramesNode,
   send: StageSend,
+  { track = false }: { track?: boolean } = {},
 ): StagePlayer {
   const frames = node.frames;
   const [index, setIndex] = useState(0);
@@ -198,13 +221,18 @@ export function useFramePlayer(
 
     return {
       mode: "frames" as const,
-      frames: frames.map(({ key, title, caption, data, code }) => ({
-        key,
-        title,
-        caption,
-        data,
-        code,
-      })),
+      frames: frames.map(
+        ({ key, title, label, caption, data, code, moves, focus }) => ({
+          key,
+          title,
+          ...(label && { label }),
+          caption,
+          data,
+          code,
+          ...(moves && { moves }),
+          ...(focus && { focus }),
+        }),
+      ),
       markers: [],
       scenarios: [],
       frame: indexRef.current,
@@ -218,7 +246,9 @@ export function useFramePlayer(
   useEffect(() => {
     if (!playing) return;
 
-    const duration = frame.duration ?? DEFAULT_DURATION;
+    const duration =
+      frame.duration ?? (track ? DIAGRAM_DURATION : DEFAULT_DURATION);
+
     const held = heldRef.current;
     const from = held.index === index ? held.fraction : 0;
     const remaining = Math.round((1 - from) * duration);
@@ -236,7 +266,7 @@ export function useFramePlayer(
 
       heldRef.current = { index, fraction: from + (1 - from) * ran };
     };
-  }, [playing, index, frame.duration]);
+  }, [playing, index, frame.duration, track]);
 
   // Play on a frame drawn without its motion shows it again with it, so a
   // new stage's first frame, and the first frame after Replay, move too.
@@ -287,7 +317,19 @@ export function useFramePlayer(
 
   const steps = activeFrames.every((item) => item.label) ? activeFrames : null;
 
-  return {
+  const toggle = () => {
+    if (playing) return setPlaying(false);
+
+    // Replay starts the first frame's clock over.
+    if (activeIndex >= last) {
+      heldRef.current = { index: -1, fraction: 0 };
+      go(0, true);
+    }
+
+    setPlaying(true);
+  };
+
+  const player: StagePlayer = {
     stops: activeFrames,
     activeIndex,
     pick,
@@ -323,32 +365,19 @@ export function useFramePlayer(
           label="Previous frame"
           disabled={activeIndex === 0}
           onClick={() => go(activeIndex - 1, false)}
-        >
-          <path d="M14.5 6.5 9 12l5.5 5.5" />
-        </ControlButton>
+          icon={ChevronLeftIcon}
+        />
         <ControlButton
           label={playing ? "Pause" : activeIndex >= last ? "Replay" : "Play"}
-          onClick={() => {
-            if (playing) return setPlaying(false);
-
-            // Replay starts the first frame's clock over.
-            if (activeIndex >= last) {
-              heldRef.current = { index: -1, fraction: 0 };
-              go(0, true);
-            }
-
-            setPlaying(true);
-          }}
-        >
-          {playing ? pauseIcon : playIcon}
-        </ControlButton>
+          onClick={toggle}
+          icon={playing ? PauseIcon : PlayIcon}
+        />
         <ControlButton
           label="Next frame"
           disabled={activeIndex >= last}
           onClick={() => go(activeIndex + 1, false)}
-        >
-          <path d="M9.5 6.5 15 12l-5.5 5.5" />
-        </ControlButton>
+          icon={ChevronRightIcon}
+        />
         <StopCaption stops={activeFrames} activeIndex={activeIndex} />
         {!steps && (
           <div {...stylex.props(styles.dots)} role="group" aria-label="Frames">
@@ -365,6 +394,44 @@ export function useFramePlayer(
         )}
       </>
     ),
+  };
+
+  if (!track) return player;
+
+  return {
+    ...player,
+    strip: null,
+    afterStage: (
+      <FrameControls
+        frames={activeFrames.map((item) => ({
+          ...item,
+          title: item.label ?? item.title,
+        }))}
+        activeIndex={activeIndex}
+        playing={playing}
+        timer={timer}
+        onToggle={toggle}
+        onPick={(position) => pick(position, "controls")}
+        // A frame whose moves send tokens along wires plays them once; the
+        // reader replays them.
+        onReplay={
+          activeFrames[activeIndex]?.moves?.length
+            ? () => send({ type: "replay" })
+            : undefined
+        }
+      />
+    ),
+    controls: null,
+    // Space plays or pauses when the figure itself has focus, and the arrows
+    // step, as they do in the player.
+    onFigureKeyDown(event) {
+      if (event.target !== event.currentTarget) return;
+
+      if (event.key === " ") {
+        event.preventDefault();
+        toggle();
+      } else player.onKeyDown(event);
+    },
   };
 }
 

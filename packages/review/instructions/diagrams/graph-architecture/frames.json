@@ -1,0 +1,85 @@
+[
+  {
+    "key": "call",
+    "title": "A call arrives",
+    "label": "CALL",
+    "caption": "The client calls the gateway, which asks the limiter for a token.",
+    "code": ["gateway", "take"],
+    "data": { "bucket": "filling", "tokens": "3 of 5", "refused": 0 },
+    "moves": [
+      { "from": "client", "to": "gateway", "label": "GET" },
+      { "from": "gateway", "to": "limiter", "label": "take", "delay": 500 }
+    ]
+  },
+  {
+    "key": "pass",
+    "title": "The call passes",
+    "label": "PASS",
+    "caption": "There is a token, so the gateway forwards the call to the orders service.",
+    "code": ["forward"],
+    "data": { "bucket": "filling", "tokens": "2 of 5", "refused": 0 },
+    "moves": [
+      { "from": "limiter", "to": "gateway", "label": "ok" },
+      { "from": "gateway", "to": "orders", "label": "List", "delay": 500 }
+    ]
+  },
+  {
+    "key": "read",
+    "title": "The service reads",
+    "label": "READ",
+    "caption": "The orders service reads the client's orders from its database.",
+    "code": ["list-orders", "query"],
+    "data": { "bucket": "filling", "tokens": "2 of 5", "refused": 0 },
+    "moves": [{ "from": "orders", "to": "db", "label": "SELECT" }]
+  },
+  {
+    "key": "answer",
+    "title": "The answer returns",
+    "label": "ANSWER",
+    "caption": "The orders go back through the gateway to the client.",
+    "data": { "bucket": "filling", "tokens": "2 of 5", "refused": 0 },
+    "moves": [
+      { "from": "orders", "to": "gateway", "label": "orders" },
+      { "from": "gateway", "to": "client", "label": "200", "delay": 500 }
+    ]
+  },
+  {
+    "key": "empty",
+    "title": "The bucket is empty",
+    "label": "EMPTY",
+    "caption": "A burst has used every token, and the bucket holds nothing until its next refill.",
+    "code": ["take"],
+    "data": { "bucket": "empty", "tokens": "0 of 5", "refused": 0 },
+    "focus": ["limiter"]
+  },
+  {
+    "key": "late",
+    "title": "One more call",
+    "label": "CALL",
+    "caption": "The next call arrives, and the gateway asks the limiter as before.",
+    "code": ["gateway", "take"],
+    "data": { "bucket": "empty", "tokens": "0 of 5", "refused": 0 },
+    "moves": [
+      { "from": "client", "to": "gateway", "label": "GET" },
+      { "from": "gateway", "to": "limiter", "label": "take", "delay": 500 }
+    ]
+  },
+  {
+    "key": "refuse",
+    "title": "The call is refused",
+    "label": "REFUSE",
+    "caption": "The limiter has no token, so the gateway answers 429 and the orders service never sees the call.",
+    "code": ["gateway"],
+    "data": { "bucket": "empty", "tokens": "0 of 5", "refused": 1 },
+    "moves": [
+      { "from": "limiter", "to": "gateway", "label": "none", "failed": true },
+      {
+        "from": "gateway",
+        "to": "client",
+        "label": "429",
+        "failed": true,
+        "delay": 500
+      }
+    ]
+  }
+]

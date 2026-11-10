@@ -1,0 +1,31 @@
+[
+  {
+    "id": "block-1",
+    "type": "diagram",
+    "title": "Order status",
+    "description": "How an order's status reaches the store.",
+    "frames": [
+      {
+        "key": "sent",
+        "title": "Order sent",
+        "label": "SENT",
+        "moves": [{ "from": "app", "to": "orders", "label": "POST /orders" }]
+      },
+      {
+        "key": "queued",
+        "title": "Status queued",
+        "label": "QUEUED",
+        "caption": "The status line sets it.",
+        "code": ["status"],
+        "moves": [{ "from": "orders", "to": "store" }]
+      }
+    ],
+    "code": {
+      "status": {
+        "source": "head/order.ts#L1",
+        "label": "Status line"
+      }
+    },
+    "script": "const app = wb.node({ id: \"app\", kind: \"container\", label: \"App\" });\nconst orders = wb.node({ id: \"orders\", kind: \"container\", label: \"Orders\", code: \"status\" });\nconst store = wb.node({ id: \"store\", kind: \"database\", label: \"Store\" });\nwb.edge({ from: app, to: orders, label: \"HTTPS\" });\nwb.edge({ from: orders, to: store, code: \"status\" });\nawait wb.layout();\n"
+  }
+]

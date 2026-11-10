@@ -1,0 +1,37 @@
+<style>
+  .summary {
+    margin: 24px 0 0;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    padding: 12px 16px;
+    box-sizing: border-box;
+    border: 1px solid var(--wb-line);
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 20px;
+  }
+  .summary dt {
+    color: var(--wb-muted);
+  }
+  .summary dd {
+    margin: 0;
+    color: var(--wb-ink);
+    font-variant-numeric: tabular-nums;
+  }
+</style>
+<div data-wb-drawing></div>
+<dl class="summary">
+  <div>
+    <dt>p95 latency</dt>
+    <dd data-summary="p95"></dd>
+  </div>
+  <div>
+    <dt>Against the SLO</dt>
+    <dd data-summary="slo"></dd>
+  </div>
+  <div>
+    <dt>Error rate</dt>
+    <dd data-summary="errors"></dd>
+  </div>
+</dl>

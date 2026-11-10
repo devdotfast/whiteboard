@@ -1,0 +1,79 @@
+[
+  {
+    "key": "submit",
+    "title": "The browser submits",
+    "label": "SUBMIT",
+    "code": ["submit"],
+    "moves": [
+      {
+        "from": "browser",
+        "to": "api",
+        "label": "email, password"
+      }
+    ]
+  },
+  {
+    "key": "verify",
+    "title": "The API verifies",
+    "label": "VERIFY",
+    "code": ["call-verify"],
+    "moves": [
+      {
+        "from": "api",
+        "to": "auth",
+        "label": "verify"
+      }
+    ]
+  },
+  {
+    "key": "verified",
+    "title": "Auth answers",
+    "label": "OK",
+    "moves": [
+      {
+        "from": "auth",
+        "to": "api",
+        "label": "user 7"
+      }
+    ]
+  },
+  {
+    "key": "session",
+    "title": "The API stores a session",
+    "label": "SESSION",
+    "code": ["save-session"],
+    "moves": [
+      {
+        "from": "api",
+        "to": "sessions",
+        "label": "SET s:9f2"
+      }
+    ]
+  },
+  {
+    "key": "audit",
+    "title": "The login is published",
+    "label": "AUDIT",
+    "caption": "Nobody waits on it.",
+    "code": ["publish-login"],
+    "moves": [
+      {
+        "from": "api",
+        "to": "events",
+        "label": "login"
+      }
+    ]
+  },
+  {
+    "key": "reply",
+    "title": "The browser gets its cookie",
+    "label": "REPLY",
+    "moves": [
+      {
+        "from": "api",
+        "to": "browser",
+        "label": "200 Set-Cookie"
+      }
+    ]
+  }
+]

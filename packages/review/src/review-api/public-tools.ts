@@ -14,6 +14,7 @@ import {
 import {
   type ReadBlock,
   checkoutAnimation,
+  diagramReferenceText,
   recordPublish,
   resolveDraftEdit,
   stageReferenceText,
@@ -133,9 +134,17 @@ export async function callPublicTool(
     return withoutRepositoryIds(block);
   };
 
-  if (tool.name === "session_get_instructions" && rest.topic === "animation") {
+  if (
+    tool.name === "session_get_instructions" &&
+    (rest.topic === "animation" || rest.topic === "diagram")
+  ) {
     const instructions = await callAuthoringTool(client, tool, fields, signal);
-    const hint = stageReferenceText(await writeStageReference());
+    const reference = await writeStageReference();
+
+    const hint =
+      rest.topic === "diagram"
+        ? diagramReferenceText(reference)
+        : stageReferenceText(reference);
 
     if (instructions instanceof ToolText)
       return new ToolText(`${instructions.text}\n\n${hint}`);
@@ -233,12 +242,34 @@ async function saveRenderedFrame(
   sessionId: string,
   targetId: string,
 ): Promise<JsonValue> {
+  // Every frame at once: each PNG goes to its own file, and the result
+  // names the files rather than carrying the images.
+  if (isJsonObject(result) && Array.isArray(result.frames))
+    return {
+      ...result,
+      frames: await Promise.all(
+        result.frames.map(async (frame) => {
+          const saved = await saveRenderedFrame(frame, sessionId, targetId);
+
+          if (!isJsonObject(saved) || !isStringValue(saved.file)) return saved;
+          const { png: _png, ...rest } = saved;
+
+          return rest;
+        }),
+      ),
+    };
+
   if (!isJsonObject(result) || !isStringValue(result.png)) return result;
 
-  const key =
+  const frame =
     isJsonObject(result.frame) && isStringValue(result.frame.key)
       ? result.frame.key
       : "frame";
+
+  // A frame shared by scenarios renders once in each.
+  const key = isStringValue(result.scenario)
+    ? `${result.scenario}-${frame}`
+    : frame;
 
   const file = path.join(
     devReviewHome(),

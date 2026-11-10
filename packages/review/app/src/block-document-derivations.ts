@@ -23,6 +23,7 @@ export function blockSectionSummary(children: Block[]): ReviewSectionSummary {
       case "software_map":
       case "animation":
       case "clip":
+      case "diagram":
         summary.diagrams += 1;
         break;
       case "code_peek":

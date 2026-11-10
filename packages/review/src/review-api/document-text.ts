@@ -43,6 +43,11 @@ export function documentText(
     `Session ${snapshot.reviewId} · version ${snapshot.version}`,
   ];
 
+  // The commits code links resolve against, so an agent can read the lines
+  // it links with `git show <head>:<path>`.
+  if (snapshot.pins)
+    lines.push(`Base ${snapshot.pins.base} · head ${snapshot.pins.head}`);
+
   if (relations && targetId === undefined) {
     const list = (boards: RelatedBoard[]) =>
       boards
@@ -200,6 +205,65 @@ export function documentText(
             `[${edge.id}] ${edge.from} → ${edge.to}${edge.label ? `: ${edge.label}` : ""}`,
           );
         break;
+      case "diagram":
+        if (element.description) detail(element.description);
+
+        for (const [index, frame] of (element.frames ?? []).entries()) {
+          detail(
+            `Frame ${index + 1} [${frame.key}]: ${frame.title}${frame.caption ? ` — ${frame.caption}` : ""}`,
+          );
+
+          if (frame.code) write(depth + 2, `Code: ${frame.code.join(", ")}`);
+
+          for (const move of frame.moves ?? [])
+            write(
+              depth + 2,
+              `Move: ${move.from} → ${move.to}${move.label ? ` (${move.label})` : ""}`,
+            );
+        }
+
+        for (const scenario of element.scenarios ?? [])
+          detail(
+            `Scenario [${scenario.key}] ${scenario.label}: ${scenario.frames.join(" → ")}`,
+          );
+
+        for (const [index, chapter] of (
+          element.timeline?.chapters ?? []
+        ).entries())
+          detail(
+            `Chapter ${index + 1} [${chapter.key}]: ${chapter.title} (${chapter.duration} ms)`,
+          );
+
+        if (runs) {
+          const run =
+            element.id === undefined ? undefined : runs.get(element.id);
+
+          write(depth + 1, runText(run));
+
+          for (const finding of run?.findings ?? [])
+            write(depth + 2, `Finding: ${finding}`);
+
+          if (run?.claims) {
+            const { matches, changed, unlinked } = run.claims;
+
+            write(
+              depth + 1,
+              `Claims: ${matches} match, ${changed} changed, ${unlinked} unlinked.${run.claims.changedLabels.length ? ` Changed: ${run.claims.changedLabels.join(", ")}.` : ""}${run.claims.unlinkedLabels.length ? ` Unlinked: ${run.claims.unlinkedLabels.join(", ")}.` : ""}`,
+            );
+          }
+        }
+
+        for (const [name, entry] of Object.entries(element.code))
+          detail(
+            `Code ${name}${entry.label ? ` (${entry.label})` : ""}: ${entry.source}`,
+          );
+
+        if (detailed && element.html !== undefined)
+          code(depth + 1, { language: "html", text: element.html });
+
+        if (detailed && element.script !== undefined)
+          code(depth + 1, { language: "javascript", text: element.script });
+        break;
       case "animation":
       case "clip":
         if (element.type === "animation") {
@@ -236,14 +300,7 @@ export function documentText(
           const run =
             element.id === undefined ? undefined : runs.get(element.id);
 
-          write(
-            depth + 1,
-            run?.error
-              ? `Script error: ${run.error}`
-              : run
-                ? "Ran in an open whiteboard without a script error."
-                : "Not run yet: its script runs only where the whiteboard is open.",
-          );
+          write(depth + 1, runText(run));
         }
 
         for (const [name, entry] of Object.entries(element.code)) {
@@ -289,4 +346,13 @@ export function documentText(
     );
 
   return lines.join("\n");
+}
+
+/** What a canvas last saw an animation's or diagram's script do. */
+function runText(run: AnimationRun | undefined): string {
+  if (run?.error) return `Script error: ${run.error}`;
+
+  return run
+    ? "Ran in an open whiteboard without a script error."
+    : "Not run yet: its script runs only where the whiteboard is open.";
 }

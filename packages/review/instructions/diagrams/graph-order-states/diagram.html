@@ -1,0 +1,20 @@
+<wb-graph direction="right">
+  <wb-node id="cart" label="Cart"></wb-node>
+  <wb-node id="pending" label="Pending" tag="Awaiting payment"></wb-node>
+  <wb-node id="paid" label="Paid"></wb-node>
+  <wb-node id="packed" label="Packed"></wb-node>
+  <wb-node id="shipped" label="Shipped"></wb-node>
+  <wb-node id="delivered" label="Delivered"></wb-node>
+  <wb-node id="cancelled" label="Cancelled"></wb-node>
+  <wb-node id="refunded" label="Refunded"></wb-node>
+  <wb-edge from="cart" to="pending" label="checkout"></wb-edge>
+  <wb-edge from="pending" to="paid" label="charge ok"></wb-edge>
+  <wb-edge from="pending" to="cart" label="card declined"></wb-edge>
+  <wb-edge from="pending" to="cancelled" label="timeout"></wb-edge>
+  <wb-edge from="paid" to="packed" label="pick"></wb-edge>
+  <wb-edge from="paid" to="refunded" label="cancel"></wb-edge>
+  <wb-edge from="packed" to="shipped" label="hand off"></wb-edge>
+  <wb-edge from="shipped" to="delivered" label="signed"></wb-edge>
+  <wb-edge from="shipped" to="packed" label="returned to depot"></wb-edge>
+  <wb-edge from="delivered" to="refunded" label="return"></wb-edge>
+</wb-graph>

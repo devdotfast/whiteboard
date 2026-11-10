@@ -1,0 +1,42 @@
+{
+  "title": "Logging in",
+  "description": "The calls a login makes, in order.",
+  "code": {
+    "login-form": {
+      "source": "head/web/src/LoginForm.tsx#L20-L44",
+      "label": "Login form"
+    },
+    "login-handler": {
+      "source": "head/api/login.go#L15-L60",
+      "label": "Login handler"
+    },
+    "verify": {
+      "source": "head/auth/verify.go#L10-L35",
+      "label": "Verify"
+    },
+    "session-store": {
+      "source": "head/api/sessions.go#L8-L20",
+      "label": "Session store"
+    },
+    "audit-topic": {
+      "source": "head/api/audit.go#L5",
+      "label": "Audit topic"
+    },
+    "submit": {
+      "source": "head/web/src/LoginForm.tsx#L31",
+      "label": "Submit"
+    },
+    "call-verify": {
+      "source": "head/api/login.go#L28",
+      "label": "Call verify"
+    },
+    "save-session": {
+      "source": "head/api/login.go#L41",
+      "label": "Save the session"
+    },
+    "publish-login": {
+      "source": "head/api/login.go#L47",
+      "label": "Publish the login"
+    }
+  }
+}

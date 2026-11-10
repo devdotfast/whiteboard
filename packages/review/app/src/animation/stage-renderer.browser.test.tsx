@@ -237,6 +237,32 @@ describe("renderStage", () => {
     expect(container.querySelector("button[aria-label='Replay']")).toBeTruthy();
   });
 
+  it("waits for a block that is still drawing in before it reports", async () => {
+    const container = await mount([clip]);
+
+    // The board is still drawing the block in, as it does for one an agent
+    // just wrote.
+    const block = container.querySelector<HTMLElement>(
+      "[data-review-node-id='trip']",
+    )!;
+
+    block.dataset.motion = "landing";
+
+    let done = false;
+
+    const pending = render("trip", "end").then((rendered) => {
+      done = true;
+
+      return rendered;
+    });
+
+    await act(() => new Promise((resolve) => setTimeout(resolve, 1500)));
+    expect(done).toBe(false);
+
+    delete block.dataset.motion;
+    expect((await pending).frame.key).toBe("end");
+  });
+
   it("names a stop the block does not have, and a block the board does not", async () => {
     await mount([clip]);
 
@@ -244,7 +270,7 @@ describe("renderStage", () => {
       "middle is not a marker of the clip.",
     );
     await expect(render("other", "start")).rejects.toThrow(
-      "other is not an animation or clip on the board showing.",
+      "other is not an animation, clip or diagram on the board showing.",
     );
   });
 });

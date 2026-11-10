@@ -579,6 +579,14 @@ it("authenticates clients, reports capabilities and readiness without exposing t
     softwareMapEnabled: true,
     animationsEnabled: true,
   });
+  // The headless preference turns diagrams on with animations.
+  expect(await server.client.read<string>("/instructions")).toContain(
+    "- diagram ",
+  );
+  // Off, the topic is refused.
+  await expect(
+    server.client.read<string>("/instructions?topic=diagram"),
+  ).resolves.toBeTruthy();
 
   const status = await cli(
     ["--state-dir", server.stateDir, "server", "status", "--json"],

@@ -45,12 +45,16 @@ function readmeHeading(file: string, text: string) {
 /** Every reference animation, sorted by name, each checked as a publish would
  * be. Strict (the default) throws on a broken reference, for the tests that
  * keep them valid; otherwise a broken one is left out, so an agent's checkout
- * and instructions never fail on a reference. */
+ * and instructions never fail on a reference. `folder` "diagrams" reads the
+ * reference diagrams instead. */
 export async function readAnimationReferences(
   root = findReviewPackageRoot(import.meta.url),
-  { strict = true } = {},
+  {
+    strict = true,
+    folder = "animations",
+  }: { strict?: boolean; folder?: "animations" | "diagrams" } = {},
 ): Promise<AnimationReference[]> {
-  const parent = path.join(root, "instructions", "animations");
+  const parent = path.join(root, "instructions", folder);
   let entries;
 
   try {
@@ -82,7 +86,7 @@ export async function readAnimationReferences(
         if (!strict) return undefined;
 
         throw new ReviewInputError(
-          `Reference animation ${name}: ${error instanceof Error ? error.message : String(error)}`,
+          `Reference ${folder === "diagrams" ? "diagram" : "animation"} ${name}: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }),

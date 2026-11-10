@@ -1,0 +1,10 @@
+{
+  "title": "Checkout latency",
+  "description": "A latency regression after a deploy, found and fixed. Hover a chart for exact values.",
+  "code": {
+    "latency-query": {
+      "source": "head/services/metrics/checkout_latency.sql#L2-L4",
+      "label": "The query behind both charts"
+    }
+  }
+}

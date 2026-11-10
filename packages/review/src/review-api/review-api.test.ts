@@ -3906,8 +3906,8 @@ it("validates range lens evidence and scopes progress and Uncategorized to disti
     selected,
     expect.anything(),
   );
-  // A diagram's evidence stays in the document: it is not a Diff-view lens
-  // and does not categorize the lines it cites.
+  // A diagram's code links stay in the document: they are not a Diff-view
+  // lens and do not categorize the lines they cite.
   await edit(reviewId, {
     type: "insert",
     content: {

@@ -1,0 +1,25 @@
+<style>
+  wb-row[data-wb-value="empty"] {
+    color: var(--wb-removed);
+  }
+</style>
+<wb-graph direction="down">
+  <wb-node id="client" kind="person" label="Client"></wb-node>
+  <wb-group label="Edge" tag="public subnet">
+    <wb-node id="gateway" label="Gateway" tag="Go" code="gateway"></wb-node>
+    <wb-node id="limiter" kind="component" label="Limiter" tag="Token bucket" code="take"></wb-node>
+  </wb-group>
+  <wb-group label="Services" tag="private subnet">
+    <wb-node id="orders" label="Orders service" tag="Go" code="list-orders"></wb-node>
+    <wb-node id="db" kind="database" label="Orders" tag="Postgres"></wb-node>
+  </wb-group>
+  <wb-edge from="client" to="gateway" label="HTTPS"></wb-edge>
+  <wb-edge from="gateway" to="limiter" label="take" code="take"></wb-edge>
+  <wb-edge from="gateway" to="orders" label="gRPC" code="forward"></wb-edge>
+  <wb-edge from="orders" to="db" label="SQL" code="query"></wb-edge>
+  <wb-panel label="Limiter">
+    <wb-row label="Bucket" value="bucket"></wb-row>
+    <wb-row label="Tokens" value="tokens"></wb-row>
+    <wb-row label="Refused" value="refused"></wb-row>
+  </wb-panel>
+</wb-graph>

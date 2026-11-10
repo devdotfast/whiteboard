@@ -1,0 +1,4 @@
+{
+  "title": "Order states",
+  "description": "The states an order moves through, from the cart to delivery, refund or cancellation."
+}
