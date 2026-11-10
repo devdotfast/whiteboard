@@ -214,6 +214,26 @@ export interface PeekViewer {
   setSources?(code: BoardSources): Promise<void>;
 }
 
+/** Characters `start` to `end` of block `blockId`'s text, which was `text` then. */
+export interface PassageAnchor {
+  blockId: string;
+  start: number;
+  end: number;
+  text: string;
+}
+
+export interface SelectedPassage {
+  anchor: PassageAnchor;
+  quote: string;
+}
+
+export interface PassageMark {
+  id: string;
+  anchor: PassageAnchor;
+  /** Washed more deeply. */
+  active?: boolean;
+}
+
 /** A host that reads and edits nothing. `theme` defaults to "system",
  * `wasmUrl` to the shipped routing wasm and `peeks` to `staticPeeks`.
  * `setSources` hands the peeks the lines they quote. */
@@ -221,9 +241,19 @@ export declare function readOnlyHost(options?: {
   theme?: "light" | "dark" | "system";
   wasmUrl?: string;
   peeks?: (settings: PeekSettings) => PeekViewer;
+  selectionActions?: readonly {
+    label: string;
+    onSelect(passage: SelectedPassage): void;
+  }[];
+  /** False leaves Copy ref off the selection toolbar. */
+  copyRef?: boolean;
+  onMarkClick?(ids: string[]): void;
+  /** The marks whose words are gone from the document. */
+  onMarksResolved?(lost: string[]): void;
 }): WhiteboardHost &
   Disposable & {
     setSources(code: BoardSources): Promise<void>;
+    setMarks(marks: readonly PassageMark[]): void;
   };
 
 /** Lines of one file at one commit; `fromLine` is 1-based. */

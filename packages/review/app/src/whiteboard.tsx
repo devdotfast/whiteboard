@@ -42,6 +42,7 @@ import { CanvasQueryProvider, useCanvasQueryScope } from "./canvas-query";
 import { ReviewDebugSettingsProvider } from "./debug-settings";
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
 import { DrawQueueProvider } from "./draw-queue-provider";
+import { HostPassagesProvider, type PassageHost } from "./host-passages";
 import { CanvasUiContext } from "./host/canvas-ui";
 import {
   type ReviewSession,
@@ -87,6 +88,7 @@ export interface WhiteboardData extends ApiDocumentData {
 
 export interface WhiteboardHost extends ReviewCanvasBridge {
   find?: ReviewFindHost;
+  passages?: PassageHost;
 }
 
 export type WhiteboardSettings = ReviewCanvasSettings;
@@ -223,11 +225,16 @@ export function WhiteboardProvider({
                                         >
                                           <AskHistoryProvider>
                                             <AskDesktopSync />
-                                            <AgentSelectionProvider
-                                              revision={snapshot.reviewId}
+                                            <HostPassagesProvider
+                                              host={host.passages}
+                                              version={snapshot.version}
                                             >
-                                              {children}
-                                            </AgentSelectionProvider>
+                                              <AgentSelectionProvider
+                                                revision={snapshot.reviewId}
+                                              >
+                                                {children}
+                                              </AgentSelectionProvider>
+                                            </HostPassagesProvider>
                                           </AskHistoryProvider>
                                         </BoardReview>
                                       </ReviewDebugSettingsProvider>

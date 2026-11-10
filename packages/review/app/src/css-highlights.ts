@@ -19,6 +19,12 @@ const styles = create({
   "ask-thread-active": {
     "::highlight(ask-thread-active)": { backgroundColor: tokens.markerGlow },
   },
+  "host-passage": {
+    "::highlight(host-passage)": { backgroundColor: tokens.accentWash },
+  },
+  "host-passage-active": {
+    "::highlight(host-passage-active)": { backgroundColor: tokens.markerGlow },
+  },
 });
 
 export function setCssHighlight(
