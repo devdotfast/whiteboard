@@ -20,6 +20,7 @@ import { createPortal, flushSync } from "react-dom";
 import { resolveAskAnchor } from "./ask-anchor";
 import { useAskHistory } from "./ask-history";
 import { setCssHighlight } from "./css-highlights";
+import { onPlainClick, underRange } from "./passage-clicks";
 import { useOptionalReviewPanelStore } from "./review-panel";
 import type { AskPassage } from "./review-panel-model";
 import type { AskOpenOptions, ReviewPanelStore } from "./review-panel-store";
@@ -411,21 +412,14 @@ function rowStyle(
   } as CSSProperties;
 }
 
-/** How far a press may move and still be a click rather than a drag. */
-const CLICK_SLOP = 4;
-
 /** What a click inside the article does itself, rather than open a pin's
  * conversations: the pins, links and controls. */
 const CLICKABLE =
   "[data-ask-pins], a, button, input, textarea, select, [role=button]";
 
 /** Whether the pointer is on a mark's words. */
-function under(mark: AskMark, x: number, y: number) {
-  return [...mark.range.getClientRects()].some(
-    (rect) =>
-      x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom,
-  );
-}
+const under = (mark: AskMark, x: number, y: number) =>
+  underRange(mark.range, x, y);
 
 /** Marks what each saved conversation asked about, as the margin notes of
  * the review: the passage is washed and a pin beside it reopens it. The
@@ -572,35 +566,8 @@ export function AskThreadMarks({
   // blocks may belong to an editor.
   useEffect(() => {
     if (!article) return;
-    let pressed: { x: number; y: number } | null = null;
 
-    const press = (event: PointerEvent) => {
-      pressed =
-        event.isPrimary && event.button === 0
-          ? { x: event.clientX, y: event.clientY }
-          : null;
-    };
-
-    const click = (event: MouseEvent) => {
-      const from = pressed;
-
-      pressed = null;
-
-      if (
-        !from ||
-        event.button !== 0 ||
-        event.detail !== 1 ||
-        event.shiftKey ||
-        event.altKey ||
-        event.metaKey ||
-        event.ctrlKey ||
-        Math.hypot(event.clientX - from.x, event.clientY - from.y) >
-          CLICK_SLOP ||
-        (event.target instanceof Element && event.target.closest(CLICKABLE)) ||
-        article.ownerDocument.getSelection()?.isCollapsed === false
-      )
-        return;
-
+    return onPlainClick(article, CLICKABLE, (event) => {
       const hit = marks.filter((mark) =>
         under(mark, event.clientX, event.clientY),
       );
@@ -610,15 +577,7 @@ export function AskThreadMarks({
       );
       // The caret stays where the click put it.
       openMarks(panels, hit, { keepFocus: true });
-    };
-
-    article.addEventListener("pointerdown", press);
-    article.addEventListener("click", click);
-
-    return () => {
-      article.removeEventListener("pointerdown", press);
-      article.removeEventListener("click", click);
-    };
+    });
   }, [article, marks, panels]);
 
   const revealRequest = history?.revealRequest;

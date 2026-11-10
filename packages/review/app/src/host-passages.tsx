@@ -13,6 +13,7 @@ import {
 
 import { type AskAnchor, resolveAskAnchor } from "./ask-anchor";
 import { setCssHighlight } from "./css-highlights";
+import { onPlainClick, underRange } from "./passage-clicks";
 
 export interface SelectedPassage {
   anchor: AskAnchor;
@@ -73,13 +74,8 @@ const noMarks = () => NO_MARKS;
 
 const never = () => () => {};
 
-const CLICK_SLOP = 4;
-
-const under = (range: Range, x: number, y: number) =>
-  [...range.getClientRects()].some(
-    (rect) =>
-      x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom,
-  );
+/** What a click in the article does itself: links and controls. */
+const CLICKABLE = "a, button, input, textarea, select, [role=button]";
 
 /** A mark's range follows its words, so it is found once per version drawn. */
 export function HostPassageMarks({
@@ -150,47 +146,14 @@ export function HostPassageMarks({
     const clicked = host?.onDidClickMarks;
 
     if (!article || !clicked || !found.size) return;
-    let pressed: { x: number; y: number } | null = null;
 
-    const press = (event: PointerEvent) => {
-      pressed =
-        event.isPrimary && event.button === 0
-          ? { x: event.clientX, y: event.clientY }
-          : null;
-    };
-
-    const click = (event: MouseEvent) => {
-      const from = pressed;
-
-      pressed = null;
-
-      if (
-        !from ||
-        event.detail !== 1 ||
-        event.shiftKey ||
-        event.altKey ||
-        event.metaKey ||
-        event.ctrlKey ||
-        Math.hypot(event.clientX - from.x, event.clientY - from.y) >
-          CLICK_SLOP ||
-        article.ownerDocument.getSelection()?.isCollapsed === false
-      )
-        return;
-
+    return onPlainClick(article, CLICKABLE, (event) => {
       const hit = [...found].flatMap(([id, range]) =>
-        under(range, event.clientX, event.clientY) ? [id] : [],
+        underRange(range, event.clientX, event.clientY) ? [id] : [],
       );
 
       if (hit.length) clicked(hit);
-    };
-
-    article.addEventListener("pointerdown", press);
-    article.addEventListener("click", click);
-
-    return () => {
-      article.removeEventListener("pointerdown", press);
-      article.removeEventListener("click", click);
-    };
+    });
   }, [article, host, found]);
 
   return null;
