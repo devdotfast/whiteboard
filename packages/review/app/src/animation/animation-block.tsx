@@ -4,6 +4,7 @@ import { useReviewDebugSettings } from "@canvas/debug-settings";
 import { DiagramHeader } from "@canvas/diagram-header";
 import { diagramStyles } from "@canvas/diagram-styles";
 import { DiagramTourOverlay, useDiagramTourShell } from "@canvas/diagram-tour";
+import { wbRuntime } from "@canvas/diagram/wb-runtime";
 import {
   useDrawQueueControls,
   useMotionPhase,
@@ -72,15 +73,22 @@ import {
   type SlotLayout,
   type StageColorScheme,
   type StageInit,
+  type StageLibrary,
   type StageMessage,
+  THREE_SPLIT,
   stageMessageSchema,
 } from "./stage-protocol";
 import { registerStageRenderer } from "./stage-renderer";
 import { stageRuntime } from "./stage-runtime";
 import { SCALE } from "./stage-scale";
+import { stillPlayer } from "./still-player";
 
 // Read on demand: a Worker may lack import.meta.url.
 const stageUrl = () => new URL("./stage.html", import.meta.url).href;
+
+// The space a diagram keeps around its drawing, inside the stage, so a
+// label at its edge is not cut.
+const DIAGRAM_INSET = 8;
 
 // An auto-sized stage's height before it has reported one.
 const STAGE_MIN_HEIGHT = 120;
@@ -108,6 +116,10 @@ const RENDER_POLL = 50;
 // before it measures where it is: enough for a smooth scroll to finish.
 const RENDER_STILL_FRAMES = 60;
 
+// How long a render waits for a block the agent just wrote to finish
+// drawing in on the board: past the longest draw step, a diagram's paint.
+const DRAW_IN_WAIT = 6000;
+
 const wait = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -130,6 +142,36 @@ const loadAnime = () =>
   (animeSource ??= import("@animejs-bundles/anime.umd.min.js?raw").then(
     (module) => module.default,
   ));
+
+const libraries = new Map<StageLibrary, Promise<string>>();
+
+// A diagram's libraries, each its own chunk, fetched the first time a stage
+// asks: ELK for layout, d3 and Plot for charts, three.js for 3D.
+const loadLibrary = (name: StageLibrary) => {
+  let source = libraries.get(name);
+
+  if (!source) {
+    source =
+      name === "elk"
+        ? import("@elk-bundles/elk.bundled.js?raw").then(
+            (module) => module.default,
+          )
+        : name === "three"
+          ? Promise.all([
+              import("@three-bundles/three.core.js?raw"),
+              import("@three-bundles/three.module.js?raw"),
+            ]).then(([core, module]) =>
+              [core.default, module.default].join(THREE_SPLIT),
+            )
+          : Promise.all([
+              import("@d3-bundles/d3.min.js?raw"),
+              import("@plot-bundles/plot.umd.min.js?raw"),
+            ]).then(([d3, plot]) => `${d3.default}\n${plot.default}`);
+    libraries.set(name, source);
+  }
+
+  return source;
+};
 
 let fontRules: Promise<string> | undefined;
 
@@ -197,7 +239,12 @@ function embeddableBlocks(document: Block[]): Map<string, Block> {
   const found = new Map<string, Block>();
 
   const visit = (block: Block) => {
-    if (block.id && block.type !== "animation" && block.type !== "clip")
+    if (
+      block.id &&
+      block.type !== "animation" &&
+      block.type !== "clip" &&
+      block.type !== "diagram"
+    )
       found.set(block.id, block);
 
     if ("children" in block) block.children.forEach(visit);
@@ -208,7 +255,42 @@ function embeddableBlocks(document: Block[]): Map<string, Block> {
   return found;
 }
 
-type StageBlockProps = BlockProps<"animation" | "clip">;
+type StageBlockProps = BlockProps<"animation" | "clip" | "diagram">;
+
+type DiagramNode = BlockProps<"diagram">["node"];
+
+/** A named range's source and label, however the block writes it. */
+function codeEntry(
+  node: StageBlockProps["node"],
+  name: string,
+): { source: string; label?: string } | undefined {
+  if (node.type === "diagram") return node.code[name];
+  const entry = node.code[name];
+
+  return entry === undefined ? undefined : animationCode(entry);
+}
+
+/** Whether each of a diagram's code names still holds: a range the board
+ * marked stale, or could not resolve, has changed. */
+function codeStatus(
+  node: DiagramNode,
+  anchors: ReadonlyMap<string, SourcePeekAnchor>,
+): Record<string, "checked" | "changed"> {
+  return Object.fromEntries(
+    Object.keys(node.code).map((name) => [
+      name,
+      node.id && anchors.has(animationCodeId(node.id, name))
+        ? "checked"
+        : "changed",
+    ]),
+  );
+}
+
+/** A diagram's claim about the code, as its stage reports it. */
+interface Claim {
+  label: string;
+  names: string[];
+}
 
 /** What the stage was last asked to show and what it reports showing: a
  * frame's index once it settled there, or a clip's marker once the playhead
@@ -258,10 +340,60 @@ type StagePort = ReturnType<typeof useStagePort>;
  * animation's reader steps through frames; a clip's plays one timeline.
  */
 export function AnimationBlock(props: StageBlockProps) {
-  return props.node.type === "clip" ? (
-    <ClipStage {...props} node={props.node} />
-  ) : (
-    <FrameStage {...props} node={props.node} />
+  const { node } = props;
+
+  if (node.type === "clip") return <ClipStage {...props} node={node} />;
+
+  if (node.type === "animation") return <FrameStage {...props} node={node} />;
+
+  if (node.frames) return <DiagramFrameStage {...props} node={node} />;
+
+  if (node.timeline) return <DiagramTimelineStage {...props} node={node} />;
+
+  return <DiagramStillStage {...props} node={node} />;
+}
+
+function DiagramFrameStage(props: BlockProps<"diagram">) {
+  const port = useStagePort();
+
+  return (
+    <StageBlock
+      {...props}
+      port={port}
+      player={useFramePlayer(
+        { frames: props.node.frames ?? [], scenarios: props.node.scenarios },
+        port.send,
+        { track: true },
+      )}
+    />
+  );
+}
+
+function DiagramTimelineStage(props: BlockProps<"diagram">) {
+  const port = useStagePort();
+
+  const markers = useMemo(
+    () =>
+      (props.node.timeline?.chapters ?? []).map(
+        ({ key, title, caption, code }) => ({ key, title, caption, code }),
+      ),
+    [props.node.timeline],
+  );
+
+  return (
+    <StageBlock
+      {...props}
+      port={port}
+      player={useClipPlayer({ markers }, port.send, { track: true })}
+    />
+  );
+}
+
+function DiagramStillStage(props: BlockProps<"diagram">) {
+  const port = useStagePort();
+
+  return (
+    <StageBlock {...props} port={port} player={stillPlayer(props.node.title)} />
   );
 }
 
@@ -317,8 +449,49 @@ function StageBlock({
   const canvasRef = useRef<HTMLDivElement>(null);
   const [slots, setSlots] = useState<SlotLayout[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const clip = node.type === "clip";
-  const noun = clip ? "clip" : "animation";
+  const diagram = node.type === "diagram" ? node : null;
+
+  // A clip, or a diagram with a timeline: one played timeline with markers.
+  const clip =
+    node.type === "clip" ||
+    (diagram !== null && diagram.timeline !== undefined);
+
+  const still = diagram !== null && !diagram.frames && !diagram.timeline;
+  const noun = diagram ? "diagram" : clip ? "clip" : "animation";
+
+  // A diagram's claims and what its stage found drawn wrong, as it last
+  // reported them.
+  const [claims, setClaims] = useState<Claim[]>([]);
+  const [findings, setFindings] = useState<string[]>([]);
+
+  const status = useMemo(
+    () => (diagram ? codeStatus(diagram, data.anchors) : {}),
+    [diagram, data.anchors],
+  );
+
+  // Each claim counts once: it matches when all its code holds, has changed
+  // when some does not, and is unlinked when it names none.
+  const tally = useMemo(() => {
+    const count = { matches: 0, changed: 0, unlinked: 0 };
+    const changed: string[] = [];
+    const unlinked: string[] = [];
+
+    for (const claim of claims)
+      if (!claim.names.length) {
+        count.unlinked++;
+        unlinked.push(claim.label);
+      } else if (claim.names.every((name) => status[name] === "checked"))
+        count.matches++;
+      else {
+        count.changed++;
+        changed.push(claim.label);
+      }
+
+    return { ...count, changedLabels: changed, unlinkedLabels: unlinked };
+  }, [claims, status]);
+
+  // How many times a diagram's stage has run its script to the end.
+  const [runs, setRuns] = useState(0);
 
   const reportRun = useReportAnimationRun(data.snapshot.reviewId, node.id);
 
@@ -375,6 +548,7 @@ function StageBlock({
 
   const { stops, activeIndex } = player;
   const stop = stops[activeIndex];
+
   const anchorId = clip ? markerAnchorId : frameAnchorId;
 
   // A stop per frame of the path showing, or per marker, when they show code.
@@ -408,13 +582,25 @@ function StageBlock({
   // A new stage for each edit of what it runs; frame changes reuse it.
   const stageKey = useMemo(
     () =>
-      JSON.stringify([
-        node.html,
-        node.height,
-        node.type === "clip" ? node.markers : node.frames,
-        node.code,
-        [...embeddable.keys()],
-      ]),
+      JSON.stringify(
+        node.type === "diagram"
+          ? [
+              node.html,
+              node.script,
+              node.stage,
+              node.frames,
+              node.scenarios,
+              node.timeline,
+              node.code,
+            ]
+          : [
+              node.html,
+              node.height,
+              node.type === "clip" ? node.markers : node.frames,
+              node.code,
+              [...embeddable.keys()],
+            ],
+      ),
     [node, embeddable],
   );
 
@@ -503,15 +689,32 @@ function StageBlock({
       case "reveal":
         reveal(message.name);
         break;
+      case "library":
+        loadLibrary(message.name).then(
+          (source) => send({ type: "library", name: message.name, source }),
+          () => setError(`The ${message.name} library could not be loaded.`),
+        );
+        break;
+      case "claims":
+        setClaims(message.claims);
+        break;
+      case "findings":
+        setFindings(message.findings);
+        break;
+      case "escape":
+        if (fullscreen) close();
+        break;
       case "error":
         setError(message.message);
-        reportRun(message.message);
+        reportRun({ error: message.message });
         // A broken stage must not hold the queue.
         paintRef.current.failed = true;
         endPaint();
         break;
       case "ready":
-        reportRun(null);
+        // A diagram reports with what it found, once that is in.
+        if (diagram) setRuns((count) => count + 1);
+        else reportRun({ error: null });
         paintRef.current.ready = true;
         paintStage();
         break;
@@ -546,14 +749,17 @@ function StageBlock({
       kind: ReturnType<StagePlayer["boot"]>,
       paint: boolean,
     ): Promise<StageInit> => {
-      const [anime, fonts] = await Promise.all([loadAnime(), loadFonts()]);
+      const [anime, fonts] = await Promise.all([
+        node.type === "diagram" ? null : loadAnime(),
+        loadFonts(),
+      ]);
 
       return {
         type: "init",
         ...kind,
-        html: node.html,
+        html: node.type === "diagram" ? "" : node.html,
         kit: STAGE_KIT_CSS,
-        autoSize: node.height === "auto",
+        autoSize: node.type === "diagram" || node.height === "auto",
         code: Object.keys(node.code),
         codeTitles: codeTitles(node, data.anchors),
         blocks: [...embeddable.keys()],
@@ -561,8 +767,25 @@ function StageBlock({
         scale: SCALE,
         reducedMotion: reducedMotion(),
         paint,
-        libraries: [anime],
+        libraries: anime === null ? [] : [anime],
         fonts,
+        ...(node.type === "diagram" && {
+          diagram: {
+            html: node.html,
+            script: node.script,
+            inset: node.stage?.inset ?? DIAGRAM_INSET,
+            room: canvasRef.current?.clientWidth ?? 0,
+            ...(node.stage && {
+              size: { width: node.stage.width, height: node.stage.height },
+            }),
+            scenarios: (node.scenarios ?? []).map(({ key, label, frames }) => ({
+              key,
+              label,
+              frames,
+            })),
+            chapters: node.timeline?.chapters ?? [],
+          },
+        }),
       };
     },
     [node, data.anchors, embeddable],
@@ -648,11 +871,19 @@ function StageBlock({
 
     if (!paint) endPaint();
     target.postMessage(
-      { type: STAGE_BOOT, runtime: stageRuntime.toString() },
+      {
+        type: STAGE_BOOT,
+        runtime: (node.type === "diagram"
+          ? wbRuntime
+          : stageRuntime
+        ).toString(),
+      },
       "*",
       [channel.port2],
     );
 
+    setClaims([]);
+    setFindings([]);
     stageInit(figure, kind, paint).then(
       (init) => channel.port1.postMessage(init satisfies HostMessage),
       () => {
@@ -660,7 +891,46 @@ function StageBlock({
         endPaint();
       },
     );
-  }, [noun, endPaint, portRef, showingRef, stageInit]);
+  }, [noun, node.type, endPaint, portRef, showingRef, stageInit]);
+
+  // A diagram tells the server what its script did and what it drew wrong,
+  // for the agent that wrote it.
+  const reportDiagram = useEffectEvent(() => {
+    // A step's label cut off on the step bar under the stage.
+    const labels = [
+      ...(canvasRef.current
+        ?.closest(".animation-block")
+        ?.querySelectorAll<HTMLElement>("[data-stop-label]") ?? []),
+    ];
+
+    const cut = labels.flatMap((label) =>
+      label.scrollWidth > label.clientWidth + 1
+        ? [
+            `The step label “${label.textContent}” is cut off on the step bar: about ${Math.max(1, Math.floor(((label.textContent?.length ?? 0) * label.clientWidth) / label.scrollWidth))} characters fit in its place there. Shorten it, and let the caption say the rest.`,
+          ]
+        : [],
+    );
+
+    // A diagram of something outside the repository defines no code, so
+    // nothing in it is unlinked.
+    const linked = Object.keys(node.code).length > 0;
+
+    reportRun({
+      error: errorRef.current,
+      findings: [...findings, ...cut],
+      claims: {
+        matches: tally.matches,
+        changed: tally.changed,
+        unlinked: linked ? tally.unlinked : 0,
+        changedLabels: tally.changedLabels.slice(0, 20),
+        unlinkedLabels: linked ? tally.unlinkedLabels.slice(0, 20) : [],
+      },
+    });
+  });
+
+  useEffect(() => {
+    if (runs > 0) reportDiagram();
+  }, [runs, findings, tally]);
 
   // An agent rendering a stop reads the block as it is now, whatever
   // render it was registered in.
@@ -674,8 +944,14 @@ function StageBlock({
   // Shows a stop for an agent: once the stage is up and painted, in the
   // scenario that has the stop, at rest, scrolled into view.
   const show = useEffectEvent(
-    async (key: string): Promise<ReviewRenderedFrame> => {
+    async (asked: string): Promise<ReviewRenderedFrame> => {
       const deadline = Date.now() + RENDER_WAIT;
+
+      // "scenario:frame" shows the frame in that scenario; a frame key alone
+      // shows it in the scenario showing, or else the first that has it.
+      const colon = asked.indexOf(":");
+      const wanted = colon < 0 ? undefined : asked.slice(0, colon);
+      const key = asked.slice(colon + 1);
 
       // A covered or minimized window paints no frame, and its timers slow to
       // a crawl, so nothing here would move: say so instead of waiting.
@@ -702,14 +978,44 @@ function StageBlock({
 
       hidden();
 
+      // Chromium holds back a stage scrolled out of view, and its moves
+      // would never end: bring it into view before it is asked to step.
+      const bringIntoView = () => {
+        const figure = figureRef.current;
+        const view = figure?.ownerDocument.defaultView;
+
+        if (!figure || !view)
+          throw new Error(`The ${noun} is not on the board.`);
+
+        figure.scrollIntoView({
+          block: figure.offsetHeight > view.innerHeight ? "start" : "nearest",
+          behavior: "instant",
+        });
+
+        return { figure, view };
+      };
+
+      bringIntoView();
       await until(() => paintRef.current.ready, "start in time");
 
       const listed = (stops: readonly PlayerStop[]) =>
-        stops.some((stop) => stop.key === key);
+        stops.some((item) => item.key === key);
+
+      if (wanted !== undefined && playerRef.current.scenario !== wanted) {
+        if (!node.scenarios?.some((item) => item.key === wanted))
+          throw new Error(`${wanted} is not a scenario of the ${noun}.`);
+        playerRef.current.selectScenario(wanted);
+        await until(
+          () =>
+            playerRef.current.scenario === wanted &&
+            listed(playerRef.current.stops),
+          `switch to scenario ${wanted} in time`,
+        );
+      }
 
       if (!listed(playerRef.current.stops)) {
         const scenario =
-          node.type === "animation"
+          node.type !== "clip" && !clip
             ? node.scenarios?.find((item) => item.frames.includes(key))
             : undefined;
 
@@ -735,16 +1041,13 @@ function StageBlock({
           () => showing.shownMarker === key && showing.askedMarker === null,
           `reach marker ${key} in time`,
         );
-      else {
+      else if (node.frames) {
         const index = node.frames.findIndex((frame) => frame.key === key);
         await until(
           () => showing.shownFrame === index && showing.askedFrame === null,
           `settle on frame ${key} in time`,
         );
       }
-
-      const paint = paintRef.current;
-      await until(() => !paint.wanted || paint.painted, "paint in time");
 
       // Its height follows the tallest frame once measured; a measure that
       // takes too long does not hold the render.
@@ -756,15 +1059,26 @@ function StageBlock({
       await nextFrame();
       await nextFrame();
 
-      const figure = figureRef.current;
-      const view = figure?.ownerDocument.defaultView;
+      // Again, now that it has its height for the frame.
+      const { figure, view } = bringIntoView();
 
-      if (!figure || !view) throw new Error(`The ${noun} is not on the board.`);
+      // A block an agent just wrote draws in on the board once it is in
+      // view: capture it after that, not halfway through its wipe. A queue
+      // that never settles does not hold the render.
+      const block = figure.closest<HTMLElement>("[data-review-node-id]");
 
-      figure.scrollIntoView({
-        block: figure.offsetHeight > view.innerHeight ? "start" : "nearest",
-        behavior: "instant",
-      });
+      await until(
+        () => !block?.dataset.motion,
+        "finish drawing in",
+        Date.now() + DRAW_IN_WAIT,
+      ).catch(() => {});
+
+      // The stage fades in only while on screen, so it is waited for here,
+      // in view, and not before the scroll.
+      await until(
+        () => !paintRef.current.wanted || paintRef.current.painted,
+        "paint in time",
+      );
 
       // Measure once the figure holds still: a scroll may still be moving, and
       // a block above may still be taking its height.
@@ -792,6 +1106,9 @@ function StageBlock({
       const width = Math.max(0, right - x);
       const height = Math.max(0, bottom - y);
       const stop = stops[position]!;
+
+      // A diagram's stage reports what it drew wrong once it has run.
+      if (diagram) await nextFrame();
 
       return {
         frame: { key, title: stop.title, position, count: stops.length },
@@ -997,12 +1314,19 @@ function StageBlock({
     followFrame();
   }, [frameAnchor, tour]);
 
+  const fixedHeight =
+    node.type !== "diagram" && node.height !== "auto" ? node.height : null;
+
+  // A diagram is one drawing its stage measures itself; an animation's
+  // frames are measured by a hidden copy first.
   const stageHeight =
-    node.height !== "auto"
-      ? node.height
-      : measuredHeight || measureLate
-        ? Math.max(contentHeight, measuredHeight)
-        : STAGE_MIN_HEIGHT;
+    fixedHeight !== null
+      ? fixedHeight
+      : diagram
+        ? contentHeight
+        : measuredHeight || measureLate
+          ? Math.max(contentHeight, measuredHeight)
+          : STAGE_MIN_HEIGHT;
 
   // Fullscreen, the stage keeps its inline width, so its layout and its
   // measured height hold, and scales to fit the room: up on a wide screen,
@@ -1031,44 +1355,55 @@ function StageBlock({
         player.onFigureKeyDown !== undefined && focusStyles.ring,
       )}
       aria-label={node.title}
+      // What a diagram's stage found drawn wrong, once its script has run:
+      // the agent reads it through the server; tests and devtools here.
+      data-stage-ran={diagram && runs > 0 ? "" : undefined}
+      data-findings={
+        diagram && findings.length ? findings.join("\n") : undefined
+      }
       tabIndex={player.onFigureKeyDown ? 0 : undefined}
       onKeyDown={player.onFigureKeyDown}
     >
       <DiagramHeader
-        kind={clip ? "CLIP" : "ANIMATION"}
+        kind={diagram ? "DIAGRAM" : clip ? "CLIP" : "ANIMATION"}
         title={node.title}
-        meta={`${activeIndex + 1} / ${stops.length}`}
+        meta={still ? undefined : `${activeIndex + 1} / ${stops.length}`}
         action={
-          fullscreen ? (
-            <Button
-              ref={closeRef}
-              xstyle={diagramStyles.button}
-              aria-label={tourOpen ? "Close tour" : `Close expanded ${noun}`}
-              onClick={close}
-            >
-              Close
-            </Button>
-          ) : tour ? (
-            <TourButton
-              buttonRef={openRef}
-              stops={tour.stops.length}
-              onClick={openTour}
-            />
-          ) : (
-            <Button
-              ref={openRef}
-              xstyle={diagramStyles.button}
-              aria-label={`Expand ${noun}`}
-              onClick={() => {
-                holdInline();
-                setExpanded(true);
-              }}
-            >
-              Expand
-            </Button>
-          )
+          <>
+            {fullscreen ? (
+              <Button
+                ref={closeRef}
+                xstyle={diagramStyles.button}
+                aria-label={tourOpen ? "Close tour" : `Close expanded ${noun}`}
+                onClick={close}
+              >
+                Close
+              </Button>
+            ) : tour ? (
+              <TourButton
+                buttonRef={openRef}
+                stops={tour.stops.length}
+                onClick={openTour}
+              />
+            ) : (
+              <Button
+                ref={openRef}
+                xstyle={diagramStyles.button}
+                aria-label={`Expand ${noun}`}
+                onClick={() => {
+                  holdInline();
+                  setExpanded(true);
+                }}
+              >
+                Expand
+              </Button>
+            )}
+          </>
         }
       />
+      {diagram?.description && (
+        <p {...stylex.props(styles.description)}>{diagram.description}</p>
+      )}
       {node.scenarios && (
         <div {...stylex.props(styles.scenarios)}>
           <span
@@ -1103,15 +1438,23 @@ function StageBlock({
           <div
             ref={canvasRef}
             {...stylex.props(styles.canvas, scaled && styles.canvasScaled)}
-            style={{
-              height: stageHeight,
-              ...(scaled && {
-                width: inlineWidth,
-                transform: `scale(${scale})`,
-              }),
-            }}
+            style={
+              scaled
+                ? {
+                    height: stageHeight,
+                    width: inlineWidth,
+                    transform: `scale(${scale})`,
+                  }
+                : undefined
+            }
           >
-            <div {...stylex.props(styles.sheet)} style={{ minWidth }}>
+            {/* The stage takes its height here, not from the box around it:
+                a scrollbar under a wide stage then adds to the box instead
+                of taking from the stage. */}
+            <div
+              {...stylex.props(styles.sheet)}
+              style={{ minWidth, height: stageHeight }}
+            >
               <iframe
                 key={stageKey}
                 ref={frameRef}
@@ -1159,10 +1502,10 @@ function StageBlock({
                     }}
                   >
                     {slot.kind === "code"
-                      ? node.code[slot.ref] && (
+                      ? codeEntry(node, slot.ref) && (
                           <CodePeekCard
                             source={anchorSelection(
-                              animationCode(node.code[slot.ref]!).source,
+                              codeEntry(node, slot.ref)!.source,
                               node.pins,
                             )}
                             heightMode="capped"
@@ -1189,9 +1532,11 @@ function StageBlock({
           onKeyDown={player.onKeyDown}
         />
       )}
-      <div {...stylex.props(styles.controls)} onKeyDown={player.onKeyDown}>
-        {player.controls}
-      </div>
+      {player.controls !== null && (
+        <div {...stylex.props(styles.controls)} onKeyDown={player.onKeyDown}>
+          {player.controls}
+        </div>
+      )}
       {error && (
         <p role="alert" {...stylex.props(styles.error)}>
           The {noun} reported an error: {error}
@@ -1239,7 +1584,7 @@ function StageBlock({
           )}
           role="dialog"
           aria-modal="true"
-          aria-label={node.title ?? (clip ? "Clip" : "Animation")}
+          aria-label={node.title}
         >
           {figure}
         </div>,
@@ -1395,12 +1740,12 @@ function codeTitles(
   anchors: ReadonlyMap<string, SourcePeekAnchor>,
 ): Record<string, string> {
   return Object.fromEntries(
-    Object.entries(node.code).flatMap(([name, entry]) => {
+    Object.keys(node.code).flatMap((name) => {
       const anchor = anchors.get(animationCodeId(node.id, name));
 
       if (!anchor) return [];
       const { file, start, end } = anchor.peek;
-      const label = animationCode(entry).label ?? name;
+      const label = codeEntry(node, name)?.label ?? name;
 
       const lines =
         start.line === end.line ? `${start.line}` : `${start.line}–${end.line}`;
@@ -1479,10 +1824,10 @@ const styles = stylex.create({
   canvasScaled: {
     transformOrigin: "0 0",
   },
-  // The stage and what the host draws over it, at the width the stage asked.
+  // The stage and what the host draws over it, at the width and height the
+  // stage asked.
   sheet: {
     position: "relative",
-    height: "100%",
   },
   overlay: {
     position: "fixed",
@@ -1542,6 +1887,15 @@ const styles = stylex.create({
     borderTopWidth: "1px",
     borderTopStyle: "solid",
     borderTopColor: tokens.rule,
+  },
+  description: {
+    margin: 0,
+    padding: `${space.s6} ${space.s12}`,
+    borderBottomWidth: "1px",
+    borderBottomStyle: "solid",
+    borderBottomColor: tokens.rule,
+    color: tokens.inkMuted,
+    font: `${fontSize.body}/${leading.normal} ${tokens.chromeFont}`,
   },
   error: {
     margin: 0,

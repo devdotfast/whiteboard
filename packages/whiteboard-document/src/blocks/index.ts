@@ -8,6 +8,7 @@ import { code } from "./code.js";
 import { code_peek } from "./code_peek.js";
 import { database_lens } from "./database_lens.js";
 import type { BlockDefinition } from "./definition.js";
+import { diagram } from "./diagram.js";
 import { divider } from "./divider.js";
 import { flow_diagram } from "./flow_diagram.js";
 import { image } from "./image.js";
@@ -32,6 +33,7 @@ export const leafSchema = z.discriminatedUnion("type", [
   flow_diagram.schema,
   animation.schema,
   clip.schema,
+  diagram.schema,
 ]);
 
 export type LeafBlock = z.infer<typeof leafSchema>;
@@ -59,6 +61,7 @@ export const blocks = {
   flow_diagram,
   animation,
   clip,
+  diagram,
   section,
   callout,
 } satisfies Definitions;
@@ -83,6 +86,7 @@ const referenceOrder: readonly BlockType[] = [
   "flow_diagram",
   "call_stack_diff",
   "database_lens",
+  "diagram",
   "animation",
   "clip",
 ];

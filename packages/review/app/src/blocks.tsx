@@ -310,6 +310,23 @@ function AnimationDiagramBlock(props: BlockProps<"animation" | "clip">) {
   );
 }
 
+function DiagramBlock(props: BlockProps<"diagram">) {
+  const { node } = props;
+  const { title, script, frames, scenarios, timeline, code, stage } = node;
+
+  // An edit draws the diagram again from a fresh stage, at its start.
+  const revision = useMemo(
+    () => JSON.stringify([script, frames, scenarios, timeline, code, stage]),
+    [script, frames, scenarios, timeline, code, stage],
+  );
+
+  return (
+    <ClientDiagram kind="DIAGRAM" title={title} height={stage?.height ?? 320}>
+      <AnimationBlock key={revision} {...props} />
+    </ClientDiagram>
+  );
+}
+
 function FlowDiagramBlock({ node, data }: BlockProps<"flow_diagram">) {
   return (
     <ClientDiagram
@@ -339,6 +356,7 @@ export const blockComponents = {
   software_map: SoftwareMapBlock,
   animation: AnimationDiagramBlock,
   clip: AnimationDiagramBlock,
+  diagram: DiagramBlock,
   section: SectionBlock,
   callout: CalloutBlock,
 } satisfies Components;

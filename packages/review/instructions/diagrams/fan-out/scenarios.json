@@ -1,0 +1,12 @@
+[
+  {
+    "key": "acked",
+    "label": "Every delivery acked",
+    "frames": ["publish", "deliver", "acked"]
+  },
+  {
+    "key": "retried",
+    "label": "Email retried",
+    "frames": ["publish", "deliver", "timeout", "retry"]
+  }
+]

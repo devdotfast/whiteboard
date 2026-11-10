@@ -72,8 +72,10 @@ import * as z from "zod";
 
 import { anchorQuotes } from "./anchor-quotes.js";
 import {
+  RENDER_ALL,
   type RenderAnimation,
   renderQuerySchema,
+  renderStops,
   renderTarget,
 } from "./animation-render.js";
 import type { AskRecord } from "./ask-history.js";
@@ -93,6 +95,7 @@ import {
   type ReviewRequestVia,
   reviewRequestOrigin,
 } from "./request-origin.js";
+import { refuseRetiredBlocks } from "./retired-blocks.js";
 import {
   legacyModeSchema,
   progressUpdateSchema,
@@ -2102,7 +2105,6 @@ export function createReviewApi(
   app.get("/:id/render", async (context) => {
     const query = renderQuerySchema.parse(context.req.query());
     const id = context.req.param("id");
-    const target = renderTarget(readReview(id), query.targetId, query.frame);
 
     if (!render)
       throw new ReviewInputError(
@@ -2110,17 +2112,60 @@ export function createReviewApi(
         409,
       );
 
+    // A diagram's canvas reports what its stage found drawn wrong and how
+    // its claims stand when it runs; the render passes the latest on.
+    const runOf = (type: string) =>
+      type === "diagram"
+        ? store.animationRunsOf(id).get(query.targetId)
+        : undefined;
+
+    // Every stop in turn, so the findings cover every step.
+    if (query.frame === RENDER_ALL) {
+      const { type, stops } = renderStops(readReview(id), query.targetId);
+      const frames = [];
+
+      for (const stop of stops)
+        frames.push(
+          await render({
+            reviewId: id,
+            targetId: query.targetId,
+            frame: stop.scenario ? `${stop.scenario}:${stop.key}` : stop.key,
+          }),
+        );
+
+      const run = runOf(type);
+
+      return context.json({
+        reviewId: id,
+        targetId: query.targetId,
+        type,
+        frames,
+        ...(run && {
+          findings: run.findings ?? [],
+          ...(run.claims && { claims: run.claims }),
+        }),
+      });
+    }
+
+    const target = renderTarget(readReview(id), query.targetId, query.frame);
+
     const rendered = await render({
       reviewId: id,
       targetId: query.targetId,
       frame: target.key,
     });
 
+    const run = runOf(target.type);
+
     return context.json({
       reviewId: id,
       targetId: query.targetId,
       type: target.type,
       ...rendered,
+      ...(run && {
+        findings: run.findings ?? [],
+        ...(run.claims && { claims: run.claims }),
+      }),
     });
   });
   app.get("/:id", async (context) => {
@@ -2209,14 +2254,14 @@ export function createReviewApi(
           : undefined;
 
       const animated = (type: string | undefined) =>
-        type === "animation" || type === "clip";
+        type === "animation" || type === "clip" || type === "diagram";
 
       if (
         incoming.some((element) => animated(element.type)) ||
         animated(target?.type)
       )
         throw new ReviewInputError(
-          "Animation authoring is disabled. Enable Animations in Settings under Experimental Features to edit animations and clips. Existing ones can still be viewed.",
+          "Animation authoring is disabled. Enable Animations in Settings under Experimental Features to edit diagrams, animations and clips. Existing ones can still be viewed.",
           409,
         );
     }
@@ -2236,6 +2281,15 @@ export function createReviewApi(
             kind: "agent",
             ...(threadId && { threadId }),
           };
+
+    if (input.operation.type === "edit") {
+      const { edit, reviewId } = input.operation;
+      const snapshot = readReview(reviewId);
+
+      // With diagrams on, agents draw them instead of the kinds they replace.
+      if (author.kind === "agent" && animationsEnabled())
+        refuseRetiredBlocks(edit, snapshot.document);
+    }
 
     // A link's kept commits go when its last copy is deleted for good.
     const copy =

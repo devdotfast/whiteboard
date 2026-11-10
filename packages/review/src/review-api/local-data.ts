@@ -2,6 +2,7 @@ import { existsSync, statSync } from "node:fs";
 import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { isStringValue } from "@dev.fast/json";
 import {
   type BlobBatchReader,
   type LocalVcs,

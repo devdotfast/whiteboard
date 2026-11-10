@@ -9,12 +9,64 @@ import * as z from "zod";
 export interface StageFrame {
   key: string;
   title: string;
+  /** The word or two on the step bar. */
+  label?: string;
   caption?: string;
   /** The frame's own state, for a script that draws each frame from it. */
   data?: JsonValue;
   /** The code names the frame lists. */
   code?: string[];
+  /** A diagram frame's movements: tokens the stage sends along wires. */
+  moves?: StageMove[];
 }
+
+/** One movement in a diagram's step, between two nodes by id. */
+export interface StageMove {
+  from: string;
+  to: string;
+  /** The wire it rides, by id, when two join the same nodes. */
+  edge?: string;
+  /** The move goes wrong: its token is drawn as an error. */
+  failed?: boolean;
+  /** The message never arrives: its token stops halfway, faded. */
+  lost?: boolean;
+  label?: string;
+  reply?: boolean;
+  delay?: number;
+}
+
+/** What a diagram's stage needs besides what every stage gets. */
+export interface DiagramStage {
+  /** The markup and styles placed in the stage before the script runs. */
+  html?: string;
+  /** The JavaScript module that draws with `wb`. */
+  script?: string;
+  /** Space around the drawing, in CSS pixels. */
+  inset: number;
+  /** The least size a hand-placed drawing gave; the stage grows to what is
+   * drawn. */
+  size?: { width?: number; height?: number };
+  /** How wide the board's column is, in CSS pixels, or 0 when unknown. */
+  room: number;
+  /** Each scenario's key, label and frame keys, for `wb.scenario`. */
+  scenarios: { key: string; label: string; frames: string[] }[];
+  /** A played diagram's chapters, in order; empty for one with frames. */
+  chapters: {
+    key: string;
+    title: string;
+    caption?: string;
+    duration: number;
+    code?: string[];
+  }[];
+}
+
+/** A library a diagram's stage loads on first use. */
+
+/** Splits three.js's source into its core and its module, which imports
+ * the core: the stage loads each from a blob of its own. */
+export const THREE_SPLIT = "\n/*wb:three.module*/\n";
+
+export type StageLibrary = "elk" | "plot" | "three";
 
 /** What the stage's script reads about one of a clip's markers. */
 export interface StageMarker {
@@ -83,6 +135,8 @@ export interface StageInit {
   /** The heights the host's content takes in each slot, for a measuring
    * copy, which has no content of its own drawn over it. */
   slotSizes?: Record<string, number>;
+  /** Set for a diagram, whose stage runs `wb` instead of html. */
+  diagram?: DiagramStage;
 }
 
 export type HostMessage =
@@ -110,8 +164,15 @@ export type HostMessage =
   | { type: "pause" }
   /** A clip: land on a marker, still playing if it was. */
   | { type: "seek"; marker: string }
+  /** A diagram's timeline: move the playhead to `at` milliseconds, still
+   * playing if it was. */
+  | { type: "scrub"; at: number }
   /** A clip: the reader picked a scenario, a timeline of its own. */
-  | { type: "scenario"; key: string };
+  | { type: "scenario"; key: string }
+  /** A diagram: play the step's moves again. */
+  | { type: "replay" }
+  /** A diagram: the source of a library it asked for. */
+  | { type: "library"; name: StageLibrary; source: string };
 
 /** The tallest an auto-sized stage may report itself. */
 export const STAGE_MAX_HEIGHT = 4000;
@@ -210,6 +271,33 @@ export const stageMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("error"),
     message: z.string().max(2000),
   }),
+  /** A diagram needs a library: ELK for layout, Plot for charts, three.js
+   * for a 3D scene. */
+  z.strictObject({
+    type: z.literal("library"),
+    name: z.enum(["elk", "plot", "three"]),
+  }),
+  /** A diagram's claims about the code: each drawn thing's label and the
+   * code names that back it, none when nothing does. */
+  z.strictObject({
+    type: z.literal("claims"),
+    claims: z
+      .array(
+        z.strictObject({
+          label: z.string().max(200),
+          names: z.array(z.string().max(64)).max(16),
+        }),
+      )
+      .max(2000),
+  }),
+  /** What a diagram drew wrong: overlaps, moves without a wire, unknown
+   * code names. Empty when it is clear. */
+  z.strictObject({
+    type: z.literal("findings"),
+    findings: z.array(z.string().max(500)).max(100),
+  }),
+  /** Escape pressed inside a diagram's stage. */
+  z.strictObject({ type: z.literal("escape") }),
 ]);
 
 export type StageMessage = z.infer<typeof stageMessageSchema>;

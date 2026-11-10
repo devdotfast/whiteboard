@@ -1,0 +1,142 @@
+[
+  {
+    "key": "acquire",
+    "title": "A asks for the lock",
+    "label": "ACQUIRE",
+    "caption": "Worker A asks the lock service for the lock.",
+    "moves": [
+      {
+        "from": "a",
+        "to": "lock",
+        "edge": "a-lock",
+        "label": "acquire"
+      }
+    ],
+    "data": {
+      "holder": "none",
+      "lease": "\u2014",
+      "token": "32",
+      "highest": "32"
+    }
+  },
+  {
+    "key": "granted",
+    "title": "A holds the lock",
+    "label": "GRANT",
+    "caption": "The lock service grants A a 10-second lease and fencing token 33.",
+    "moves": [
+      {
+        "from": "lock",
+        "to": "a",
+        "edge": "a-lock",
+        "label": "token 33"
+      }
+    ],
+    "data": {
+      "holder": "Worker A",
+      "lease": "10 s",
+      "token": "33",
+      "highest": "32"
+    }
+  },
+  {
+    "key": "write",
+    "title": "A writes with its token",
+    "label": "WRITE",
+    "caption": "A writes to the store with token 33, newer than any it has seen.",
+    "moves": [
+      {
+        "from": "a",
+        "to": "store",
+        "edge": "a-store",
+        "label": "write 33"
+      }
+    ],
+    "data": {
+      "holder": "Worker A",
+      "lease": "9 s",
+      "token": "33",
+      "highest": "33"
+    }
+  },
+  {
+    "key": "pause",
+    "title": "A pauses",
+    "label": "PAUSE",
+    "caption": "A stops for a long garbage collection, and its lease runs out while it is paused.",
+    "data": {
+      "holder": "none",
+      "lease": "expired",
+      "token": "33",
+      "highest": "33"
+    }
+  },
+  {
+    "key": "b-granted",
+    "title": "B takes the lock",
+    "label": "B GRANT",
+    "caption": "B asks for the lock and gets a new lease with token 34.",
+    "moves": [
+      {
+        "from": "b",
+        "to": "lock",
+        "edge": "b-lock",
+        "label": "acquire"
+      },
+      {
+        "from": "lock",
+        "to": "b",
+        "edge": "b-lock",
+        "label": "token 34",
+        "delay": 700
+      }
+    ],
+    "data": {
+      "holder": "Worker B",
+      "lease": "10 s",
+      "token": "34",
+      "highest": "33"
+    }
+  },
+  {
+    "key": "b-write",
+    "title": "B writes",
+    "label": "B WRITE",
+    "caption": "B writes with token 34; the store now accepts nothing older.",
+    "moves": [
+      {
+        "from": "b",
+        "to": "store",
+        "edge": "b-store",
+        "label": "write 34"
+      }
+    ],
+    "data": {
+      "holder": "Worker B",
+      "lease": "9 s",
+      "token": "34",
+      "highest": "34"
+    }
+  },
+  {
+    "key": "refused",
+    "title": "A's old write is refused",
+    "label": "REFUSED",
+    "caption": "A wakes and writes with token 33. The store has seen 34, so it refuses the write.",
+    "moves": [
+      {
+        "from": "a",
+        "to": "store",
+        "edge": "a-store",
+        "label": "write 33",
+        "failed": true
+      }
+    ],
+    "data": {
+      "holder": "Worker B",
+      "lease": "8 s",
+      "token": "34",
+      "highest": "34"
+    }
+  }
+]

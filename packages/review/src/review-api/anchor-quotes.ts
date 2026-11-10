@@ -16,7 +16,7 @@ export interface AnchorQuote {
   last?: string;
 }
 
-const QUOTE_LIMIT = 20;
+const QUOTE_LIMIT = 100;
 
 // A blank line quoted as "" reads like a failed quote.
 const clip = (line: string) =>

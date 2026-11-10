@@ -19,6 +19,25 @@ const alias = {
     path.dirname(require.resolve("animejs/package.json")),
     "dist/bundles",
   ),
+  "@elk-bundles": path.join(
+    path.dirname(require.resolve("elkjs/package.json")),
+    "lib",
+  ),
+  "@d3-bundles": path.join(
+    // The package exports no package.json: step up from its entry.
+    path.dirname(require.resolve("d3")),
+    "../dist",
+  ),
+  "@three-bundles": path.join(
+    // The package exports no package.json: step up from its entry.
+    path.dirname(require.resolve("three")),
+    "../build",
+  ),
+  "@plot-bundles": path.join(
+    // The package exports no package.json: step up from its entry.
+    path.dirname(require.resolve("@observablehq/plot")),
+    "../dist",
+  ),
   "decode-named-character-reference": path.join(
     path.dirname(require.resolve("decode-named-character-reference")),
     "index.js",
@@ -86,7 +105,14 @@ export default defineConfig({
         // The stage needs anime.js's file as text; prebundling would make it
         // a module.
         optimizeDeps: {
-          exclude: ["@animejs-bundles/anime.umd.min.js?raw"],
+          exclude: [
+            "@animejs-bundles/anime.umd.min.js?raw",
+            "@elk-bundles/elk.bundled.js?raw",
+            "@d3-bundles/d3.min.js?raw",
+            "@plot-bundles/plot.umd.min.js?raw",
+            "@three-bundles/three.core.js?raw",
+            "@three-bundles/three.module.js?raw",
+          ],
         },
         test: {
           name: "browser",

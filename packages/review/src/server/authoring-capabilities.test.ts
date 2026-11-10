@@ -78,6 +78,12 @@ it("discovers the live Desktop map preference without opening a review", async (
       softwareMapEnabled: false,
       animationsEnabled: false,
     });
+    expect(await client.read<string>("/instructions")).not.toContain(
+      "- diagram ",
+    );
+    await expect(client.read("/instructions?topic=diagram")).rejects.toThrow(
+      /Animation authoring is disabled/,
+    );
     softwareMapEnabled = true;
     animationsEnabled = true;
     expect(await client.read("/capabilities")).toMatchObject({
@@ -85,6 +91,11 @@ it("discovers the live Desktop map preference without opening a review", async (
       softwareMapEnabled: true,
       animationsEnabled: true,
     });
+    // An attached Desktop's Animations setting turns diagrams on too.
+    expect(await client.read<string>("/instructions")).toContain("- diagram ");
+    expect(await client.read<string>("/instructions?topic=diagram")).toContain(
+      "wb.layout()",
+    );
     expect(opened).toBe(false);
     await expect(
       connectReviewApi({ ...env, DEV_REVIEW_SERVER_DIR: home }),

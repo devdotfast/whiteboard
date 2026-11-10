@@ -8,23 +8,37 @@ import { useMutation } from "@tanstack/react-query";
  * request names the version the canvas shows; the block's own data can be
  * older, kept while nothing it reads changes.
  */
+/** What a run reports: the error the script threw, or null, and for a
+ * diagram what its stage found drawn wrong and how its claims stand. */
+export interface StageRunReport {
+  error: string | null;
+  findings?: string[];
+  claims?: {
+    matches: number;
+    changed: number;
+    unlinked: number;
+    changedLabels: string[];
+    unlinkedLabels: string[];
+  };
+}
+
 export function useReportAnimationRun(
   reviewId: string,
   blockId: string | undefined,
-): (error: string | null) => void {
+): (report: StageRunReport) => void {
   const session = useOptionalReviewSession();
 
   const { mutate } = useMutation({
-    mutationFn: (error: string | null) =>
+    mutationFn: (report: StageRunReport) =>
       session!.fetch("/animation-run", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ blockId, error }),
+        body: JSON.stringify({ blockId, ...report }),
       }),
   });
 
-  return (error) => {
+  return (report) => {
     // Only for the board this canvas serves, and a block saved with an id.
-    if (session?.reviewId === reviewId && blockId !== undefined) mutate(error);
+    if (session?.reviewId === reviewId && blockId !== undefined) mutate(report);
   };
 }

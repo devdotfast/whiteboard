@@ -1,7 +1,8 @@
-// An animation or clip checked out as files, so an agent edits it with its
-// own file tools and publishes the folder: the bytes travel by path, not
-// through the agent's output. A clip's folder holds markers.json where an
-// animation's holds frames.json.
+// An animation, clip or diagram checked out as files, so an agent edits it
+// with its own file tools and publishes the folder: the bytes travel by
+// path, not through the agent's output. A clip's folder holds markers.json
+// where an animation's holds frames.json; a diagram's holds diagram.html,
+// diagram.js or both where the others hold animation.html.
 
 import { createHash } from "node:crypto";
 import {
@@ -40,6 +41,8 @@ import {
 
 const FILES = {
   html: "animation.html",
+  script: "diagram.js",
+  markup: "diagram.html",
   frames: "frames.json",
   markers: "markers.json",
   scenarios: "scenarios.json",
@@ -47,14 +50,25 @@ const FILES = {
   checkout: "checkout.json",
 } as const;
 
-/** The fields block.json holds: everything but the ones with files of their own. */
-const BLOCK_FIELDS = ["title", "code", "height", "pins"];
-
-/** Every field an animation's or clip's files can set. */
-const FIELDS = ["html", "frames", "markers", "scenarios", ...BLOCK_FIELDS];
-
 /** The block types that check out as files. */
-type DraftType = "animation" | "clip";
+type DraftType = "animation" | "clip" | "diagram";
+
+/** The fields block.json holds: everything but the ones with files of their own. */
+const BLOCK_FIELDS: Record<DraftType, string[]> = {
+  animation: ["title", "code", "height", "pins"],
+  clip: ["title", "code", "height", "pins"],
+  diagram: ["title", "description", "code", "stage", "timeline", "pins"],
+};
+
+/** Every field a block's files can set. */
+const FIELDS: Record<DraftType, string[]> = {
+  animation: ["html", "frames", "scenarios", ...BLOCK_FIELDS.animation],
+  clip: ["html", "markers", "scenarios", ...BLOCK_FIELDS.clip],
+  diagram: ["html", "script", "frames", "scenarios", ...BLOCK_FIELDS.diagram],
+};
+
+const isDraftType = (type: JsonValue | undefined): type is DraftType =>
+  type === "animation" || type === "clip" || type === "diagram";
 
 /** What checkout.json records: the block the folder came from, as it was. */
 const checkoutSchema = z.strictObject({
@@ -81,6 +95,10 @@ export interface StageReference {
   styles: string;
   api: string;
   references: AnimationReference[];
+  /** wb.d.ts, the API a diagram's script draws with. */
+  diagramApi: string;
+  /** The reference diagrams an agent copies from. */
+  diagrams: AnimationReference[];
 }
 
 async function writeReadOnly(file: string, content: string): Promise<void> {
@@ -109,32 +127,51 @@ export async function writeStageReference(
   const styles = path.join(directory, "whiteboard.css");
   const api = path.join(directory, "whiteboard.d.ts");
   const copies = path.join(directory, "references");
-  const sources = await readAnimationReferences(root, { strict: false });
+  const diagramApi = path.join(directory, "wb.d.ts");
+  const diagramCopies = path.join(directory, "diagram-references");
+
+  const [sources, diagramSources] = await Promise.all([
+    readAnimationReferences(root, { strict: false }),
+    readAnimationReferences(root, { strict: false, folder: "diagrams" }),
+  ]);
 
   await mkdir(copies, { recursive: true });
+  await mkdir(diagramCopies, { recursive: true });
   await writeReadOnly(styles, stageStyleReference());
   await writeReadOnly(
     api,
     await readFile(path.join(root, "instructions", "whiteboard.d.ts"), "utf8"),
   );
-
-  const names = new Set(sources.map(({ name }) => name));
-
-  for (const stale of await readdir(copies))
-    if (!names.has(stale))
-      await rm(path.join(copies, stale), { recursive: true, force: true });
-
-  const references = await Promise.all(
-    sources.map(async (reference) => {
-      const copy = path.join(copies, reference.name);
-
-      await copyReadOnly(reference.directory, copy);
-
-      return { ...reference, directory: copy };
-    }),
+  await writeReadOnly(
+    diagramApi,
+    await readFile(path.join(root, "instructions", "wb.d.ts"), "utf8"),
   );
 
-  return { styles, api, references };
+  // Copies the references to `target`, dropping folders no longer shipped.
+  const copyAll = async (list: AnimationReference[], target: string) => {
+    const names = new Set(list.map(({ name }) => name));
+
+    for (const stale of await readdir(target))
+      if (!names.has(stale))
+        await rm(path.join(target, stale), { recursive: true, force: true });
+
+    return Promise.all(
+      list.map(async (reference) => {
+        const copy = path.join(target, reference.name);
+
+        await copyReadOnly(reference.directory, copy);
+
+        return { ...reference, directory: copy };
+      }),
+    );
+  };
+
+  const [references, diagrams] = await Promise.all([
+    copyAll(sources, copies),
+    copyAll(diagramSources, diagramCopies),
+  ]);
+
+  return { styles, api, references, diagramApi, diagrams };
 }
 
 /** The line that sends an agent to the references before it writes an animation. */
@@ -167,6 +204,37 @@ function referencesSection({ references }: StageReference): string[] {
 export const stageReferenceText = (reference: StageReference) =>
   [stageReferenceHint(reference), ...referencesSection(reference)].join("\n\n");
 
+/** The line that sends an agent to the API and references before it writes
+ * a diagram. */
+export const diagramReferenceHint = ({
+  diagramApi,
+  diagrams,
+}: StageReference) =>
+  `Before writing a diagram's script, read ${diagramApi} (the wb API it draws with).${diagrams.length ? ` Reference diagrams to start from are in ${path.dirname(diagrams[0]!.directory)}: read the README of the closest one.` : ""} All are read-only and rewritten by Whiteboard.`;
+
+/** What follows the diagram instructions: the hint, then the references. */
+export const diagramReferenceText = (reference: StageReference) =>
+  [
+    // The list below says where the references are; the hint need not.
+    reference.diagrams.length
+      ? `Before writing a diagram's script, read ${reference.diagramApi} (the wb API it draws with). It and the references are read-only and rewritten by Whiteboard.`
+      : diagramReferenceHint(reference),
+    ...(reference.diagrams.length
+      ? [
+          [
+            "## References",
+            "",
+            "Before you write a diagram, read the README of the reference closest to what you are drawing, then copy its files into your draft folder as a starting point.",
+            "",
+            ...reference.diagrams.map(
+              ({ name, summary, directory }) =>
+                `- \`${name}\`: ${summary} ${directory}`,
+            ),
+          ].join("\n"),
+        ]
+      : []),
+  ].join("\n\n");
+
 export function draftDirectory(
   sessionId: string,
   targetId: string,
@@ -185,16 +253,16 @@ const fingerprint = (block: JsonValue) =>
 
 const json = (value: JsonValue) => `${JSON.stringify(value, null, 2)}\n`;
 
-function animationBlock(block: JsonValue, targetId: string): JsonObject {
-  if (
-    !isJsonObject(block) ||
-    (block.type !== "animation" && block.type !== "clip")
-  )
+function animationBlock(
+  block: JsonValue,
+  targetId: string,
+): JsonObject & { type: DraftType } {
+  if (!isJsonObject(block) || !isDraftType(block.type))
     throw new ReviewInputError(
-      `${targetId} is ${isJsonObject(block) ? `a ${String(block.type)}` : "not a component"}; only animations and clips check out as files.`,
+      `${targetId} is ${isJsonObject(block) ? `a ${String(block.type)}` : "not a component"}; only animations, clips and diagrams check out as files.`,
     );
 
-  return block;
+  return { ...block, type: block.type };
 }
 
 /** Writes the block's files, replacing any earlier draft in the folder. */
@@ -221,10 +289,18 @@ export async function checkoutAnimation(
     await writeFile(files[key], text);
   };
 
-  await put("html", String(block.html));
+  if (block.type === "diagram") {
+    if (block.html !== undefined) await put("markup", String(block.html));
 
-  if (block.type === "clip") await put("markers", json(block.markers ?? []));
-  else await put("frames", json(block.frames ?? []));
+    if (block.script !== undefined) await put("script", String(block.script));
+
+    if (block.frames !== undefined) await put("frames", json(block.frames));
+  } else {
+    await put("html", String(block.html));
+
+    if (block.type === "clip") await put("markers", json(block.markers ?? []));
+    else await put("frames", json(block.frames ?? []));
+  }
 
   if (block.scenarios !== undefined)
     await put("scenarios", json(block.scenarios));
@@ -233,7 +309,9 @@ export async function checkoutAnimation(
     "block",
     json(
       Object.fromEntries(
-        Object.entries(block).filter(([key]) => BLOCK_FIELDS.includes(key)),
+        Object.entries(block).filter(([key]) =>
+          BLOCK_FIELDS[block.type].includes(key),
+        ),
       ),
     ),
   );
@@ -250,7 +328,7 @@ export async function checkoutAnimation(
     files,
     styles: reference.styles,
     api: reference.api,
-    next: `Edit these files with your file tools, then publish the folder: session_edit {sessionId, edit: {type: "update", targetId: "${targetId}", fromFiles: "${directory}"}}. ${stageReferenceHint(reference)}`,
+    next: `Edit these files with your file tools, then publish the folder: session_edit {sessionId, edit: {type: "update", targetId: "${targetId}", fromFiles: "${directory}"}}. ${block.type === "diagram" ? diagramReferenceHint(reference) : stageReferenceHint(reference)}`,
   };
 }
 
@@ -266,7 +344,7 @@ async function readText(directory: string, name: string, required: boolean) {
 
     if (required)
       throw new ReviewInputError(
-        `${path.join(directory, name)} does not exist. Check the animation or clip out with session_checkout, or write the file.`,
+        `${path.join(directory, name)} does not exist. Check the block out with session_checkout, or write the file.`,
       );
 
     return undefined;
@@ -287,19 +365,63 @@ async function readJson(directory: string, name: string, required: boolean) {
   }
 }
 
-/** The animation or clip a folder holds, as a block's fields with its type,
- * checked as a publish would be. frames.json makes it an animation and
- * markers.json a clip. */
+/** The animation, clip or diagram a folder holds, as a block's fields with
+ * its type, checked as a publish would be. diagram.html or diagram.js makes it a diagram,
+ * frames.json an animation and markers.json a clip. */
 export async function readAnimationFolder(
   directory: string,
 ): Promise<JsonObject & { type: DraftType }> {
-  const [html, frames, markers, scenarios, block] = await Promise.all([
-    readText(directory, FILES.html, true),
-    readJson(directory, FILES.frames, false),
-    readJson(directory, FILES.markers, false),
-    readJson(directory, FILES.scenarios, false),
-    readJson(directory, FILES.block, true),
-  ]);
+  const [markup, script, html, frames, markers, scenarios, block] =
+    await Promise.all([
+      readText(directory, FILES.markup, false),
+      readText(directory, FILES.script, false),
+      readText(directory, FILES.html, false),
+      readJson(directory, FILES.frames, false),
+      readJson(directory, FILES.markers, false),
+      readJson(directory, FILES.scenarios, false),
+      readJson(directory, FILES.block, true),
+    ]);
+
+  if (!isJsonObject(block))
+    throw new ReviewInputError(`${FILES.block} must hold a JSON object.`);
+
+  if (script !== undefined || markup !== undefined) {
+    if (html !== undefined || markers !== undefined)
+      throw new ReviewInputError(
+        `${directory} holds ${script !== undefined ? FILES.script : FILES.markup} with ${html !== undefined ? FILES.html : FILES.markers}. A diagram's folder has ${FILES.markup}, ${FILES.script} or both, ${FILES.block} and, for steps, ${FILES.frames} and ${FILES.scenarios}.`,
+      );
+
+    const stray = Object.keys(block).filter(
+      (key) => !BLOCK_FIELDS.diagram.includes(key),
+    );
+
+    if (stray.length)
+      throw new ReviewInputError(
+        `${FILES.block} holds only ${BLOCK_FIELDS.diagram.join(", ")}; move ${stray.join(", ")} out (the script is ${FILES.script}, frames ${FILES.frames}, scenarios ${FILES.scenarios}).`,
+      );
+
+    const fields: JsonObject & { type: DraftType } = {
+      ...block,
+      type: "diagram",
+    };
+
+    if (markup !== undefined) fields.html = markup;
+
+    if (script !== undefined) fields.script = script;
+
+    if (frames !== undefined) fields.frames = frames;
+
+    if (scenarios !== undefined) fields.scenarios = scenarios;
+
+    validate(fields);
+
+    return fields;
+  }
+
+  if (html === undefined)
+    throw new ReviewInputError(
+      `${path.join(directory, FILES.html)} does not exist. Write ${FILES.markup} or ${FILES.script} for a diagram, or ${FILES.html} for an animation or clip, or check one out with session_checkout.`,
+    );
 
   if (frames !== undefined && markers !== undefined)
     throw new ReviewInputError(
@@ -311,20 +433,19 @@ export async function readAnimationFolder(
       `${path.join(directory, FILES.frames)} does not exist. Write ${FILES.frames} for an animation or ${FILES.markers} for a clip, or check one out with session_checkout.`,
     );
 
-  if (!isJsonObject(block))
-    throw new ReviewInputError(`${FILES.block} must hold a JSON object.`);
-
-  const stray = Object.keys(block).filter((key) => !BLOCK_FIELDS.includes(key));
+  const stray = Object.keys(block).filter(
+    (key) => !BLOCK_FIELDS.animation.includes(key),
+  );
 
   if (stray.length)
     throw new ReviewInputError(
-      `${FILES.block} holds only ${BLOCK_FIELDS.join(", ")}; move ${stray.join(", ")} out (html is ${FILES.html}, frames ${FILES.frames} or markers ${FILES.markers}, scenarios ${FILES.scenarios}).`,
+      `${FILES.block} holds only ${BLOCK_FIELDS.animation.join(", ")}; move ${stray.join(", ")} out (html is ${FILES.html}, frames ${FILES.frames} or markers ${FILES.markers}, scenarios ${FILES.scenarios}).`,
     );
 
   const fields: JsonObject & { type: DraftType } =
     markers === undefined
-      ? { ...block, type: "animation", html: html!, frames: frames! }
-      : { ...block, type: "clip", html: html!, markers };
+      ? { ...block, type: "animation", html, frames: frames! }
+      : { ...block, type: "clip", html, markers };
 
   if (scenarios !== undefined) fields.scenarios = scenarios;
 
@@ -346,14 +467,16 @@ async function readDraft(directory: string) {
 }
 
 /** The file an issue at `issuePath` is in, and where inside it. */
-function located(issuePath: PropertyKey[]): string {
+function located(issuePath: PropertyKey[], type: DraftType): string {
   const [field, ...rest] = issuePath.map(String);
 
   const at = rest
     .map((part) => (/^\d+$/.test(part) ? `[${part}]` : `.${part}`))
     .join("");
 
-  if (field === "html") return FILES.html;
+  if (field === "html") return type === "diagram" ? FILES.markup : FILES.html;
+
+  if (field === "script") return FILES.script;
 
   if (field === "frames" || field === "markers" || field === "scenarios")
     return `${FILES[field]} ${at.replace(/^\./, "") || "(top level)"}`;
@@ -370,7 +493,7 @@ function validate(fields: JsonObject & { type: DraftType }) {
   if (!parsed.success)
     throw new ReviewInputError(
       parsed.error.issues
-        .map((issue) => `${located(issue.path)}: ${issue.message}`)
+        .map((issue) => `${located(issue.path, fields.type)}: ${issue.message}`)
         .join("\n"),
     );
 
@@ -426,12 +549,12 @@ export async function resolveDraftEdit(
 
   if (current.type !== fields.type)
     throw new ReviewInputError(
-      `${directory} holds ${fields.type === "clip" ? "a clip" : "an animation"} but ${targetId} is ${current.type === "clip" ? "a clip" : "an animation"}. Publish it with type "replace" to change its kind.`,
+      `${directory} holds a ${fields.type} but ${targetId} is a ${current.type}. Publish it with type "replace" to change its kind.`,
     );
 
   const changes: JsonObject = {};
 
-  for (const field of FIELDS)
+  for (const field of FIELDS[fields.type])
     if (JSON.stringify(fields[field]) !== JSON.stringify(current[field]))
       changes[field] = fields[field] ?? null;
 

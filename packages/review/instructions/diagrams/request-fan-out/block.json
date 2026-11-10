@@ -1,0 +1,54 @@
+{
+  "title": "Playing an episode",
+  "description": "What one Play request touches, step by step, and how a search differs.",
+  "code": {
+    "web-app": {
+      "source": "head/apps/web/src/main.tsx#L1-L12",
+      "label": "Web app"
+    },
+    "tv-app": {
+      "source": "head/apps/tv/src/main/kotlin/App.kt#L5-L20",
+      "label": "TV app"
+    },
+    "gateway": {
+      "source": "head/platform/gateway/routes.go#L9-L30",
+      "label": "Gateway routes"
+    },
+    "playback": {
+      "source": "head/platform/playback/server.go#L14-L40",
+      "label": "Playback API"
+    },
+    "catalog": {
+      "source": "head/platform/catalog/src/server.ts#L8-L30",
+      "label": "Catalog API"
+    },
+    "accounts": {
+      "source": "head/platform/accounts/schema.sql#L1-L20",
+      "label": "Accounts table"
+    },
+    "web-search": {
+      "source": "head/apps/web/src/search.ts#L9",
+      "label": "Web searches"
+    },
+    "tv-play": {
+      "source": "head/apps/tv/src/main/kotlin/Player.kt#L6",
+      "label": "TV asks to play"
+    },
+    "gateway-manifest": {
+      "source": "head/platform/gateway/play.go#L22",
+      "label": "Gateway asks Playback"
+    },
+    "gateway-title": {
+      "source": "head/platform/gateway/play.go#L23",
+      "label": "Gateway asks Catalog"
+    },
+    "gateway-search": {
+      "source": "head/platform/gateway/browse.go#L17",
+      "label": "Gateway searches"
+    },
+    "playback-plan": {
+      "source": "head/platform/playback/plan.go#L31",
+      "label": "Playback reads the plan"
+    }
+  }
+}

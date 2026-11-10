@@ -48,7 +48,7 @@ export function authoringTools(
       "Edit one document component. content is one component, named by its type; each type's fields are in the Components section of session_get_instructions.",
       "Anchors are head/path#L10-L20 or base/path#L7, or diff/path#L84-R90 for a range across sides, with repository-relative paths and 1-based inclusive lines. pins {head, base?} say which commits of the whiteboard's repository anchors quote: a step, frame, attachment or operation without pins uses its block's, and a block without them the review's.",
       "insert adds content: parentId nests it, afterId places it, and omitted placement appends. update patches a component's own fields; null removes an optional one. A section's children and a diagram's units change through their own IDs; a call stack's frames change by replacing the call stack. move and remove take a targetId; removing a flow_node removes its edges.",
-      "The host assigns short durable IDs. The result names the edited component and, for an insert or replace, its first-level children, and quotes the first and last line of each anchor the edit added or changed (the first 20; unquotedAnchors counts the rest): check they are the lines you meant. Accepted edits save at once. An edit to a block the user is editing is refused with an error: edit another block, or retry later.",
+      "The host assigns short durable IDs. The result names the edited component and, for an insert or replace, its first-level children, and quotes the first and last line of each anchor the edit added or changed (the first 100; unquotedAnchors counts the rest): check they are the lines you meant. Accepted edits save at once. An edit to a block the user is editing is refused with an error: edit another block, or retry later.",
       "While a reader may be watching, write small and often: one paragraph per edit. Insert a new diagram whole. Change one already drawn a unit at a time (a flow_node, flow_edge or step, with parentId naming the diagram), and link each added flow_node to a node already drawn.",
       ...(animationsEnabled
         ? [
@@ -177,14 +177,14 @@ export function authoringTools(
       ? [
           tool(
             "checkout",
-            "Write an animation or clip to a folder of files to edit with your own file tools: animation.html (its html), frames.json (an animation's frames, each with its data) or markers.json (a clip's markers), scenarios.json and block.json (title, code, height, pins). Then publish the folder with review_edit, giving fromFiles instead of content or changes. dir defaults to a folder Whiteboard manages; checking out again overwrites it. A publish is refused if the block changed after the checkout.",
+            "Write a diagram, animation or clip to a folder of files to edit with your own file tools. A diagram's: diagram.html (its markup) and diagram.js (its script), either or both, frames.json (its steps, each with its moves), scenarios.json and block.json (title, description, code, stage, timeline, pins). An animation's or clip's: animation.html, frames.json or markers.json, scenarios.json and block.json (title, code, height, pins). Then publish the folder with review_edit, giving fromFiles instead of content or changes. dir defaults to a folder Whiteboard manages; checking out again overwrites it. A publish is refused if the block changed after the checkout.",
             z.strictObject({ ...review, targetId: id, dir: id.optional() }),
             "GET",
             "/:reviewId/inspect",
           ),
           tool(
             "render",
-            "See an animation or clip as the reader does: Desktop shows one of its frames (frame: a frame key, or a clip's marker key; omitted, the first) on the open whiteboard and returns it as a PNG image, with the error its script threw, if any. The PNG is also written to the path the result names. After publishing, render each frame you changed and look at it, instead of taking screenshots of the screen. The whiteboard must be open in Desktop: review_create opens it, and review_open opens an existing one.",
+            "See a diagram, animation or clip as the reader does: Desktop shows one of its frames (frame: a frame key, a clip's marker key or a diagram's chapter key; omitted, the first) on the open whiteboard and returns it as a PNG image, with the error its script threw, if any. frame: \"all\" renders every frame of every scenario in turn and returns each one's file, with the findings of all of them. A diagram's result also lists its findings (overlaps, moves without a wire, unknown code names) and how its claims about the code stand. The PNG is also written to the path the result names. After publishing, render each frame you changed and look at it, instead of taking screenshots of the screen. The whiteboard must be open in Desktop: review_create opens it, and review_open opens an existing one.",
             z.strictObject({ ...review, targetId: id, frame: id.optional() }),
             "GET",
             "/:reviewId/render",
@@ -251,7 +251,7 @@ function withDraftFiles(edit: ReturnType<typeof publishedEdits>) {
     .string()
     .min(1)
     .describe(
-      "An animation's or clip's draft folder, from review_checkout or written yourself: publishes its files as the content (insert, replace) or changes (update). frames.json makes it an animation, markers.json a clip.",
+      "A diagram's, animation's or clip's draft folder, from review_checkout or written yourself: publishes its files as the content (insert, replace) or changes (update). diagram.html or diagram.js makes it a diagram, frames.json with animation.html an animation, markers.json a clip.",
     );
 
   const [insert, replace, update, move, remove] = edit.options;

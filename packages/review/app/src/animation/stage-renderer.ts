@@ -29,7 +29,7 @@ export function registerStageRenderer(
 }
 
 /** Shows `frame` of the block and reports where to capture it. Rejects when
- * the board showing has no animation or clip with that id. */
+ * the board showing has no animation, clip or diagram with that id. */
 export function renderStage(
   reviewId: string,
   blockId: string,
@@ -39,7 +39,9 @@ export function renderStage(
 
   if (!renderer)
     return Promise.reject(
-      new Error(`${blockId} is not an animation or clip on the board showing.`),
+      new Error(
+        `${blockId} is not an animation, clip or diagram on the board showing.`,
+      ),
     );
 
   return renderer.show(frame);

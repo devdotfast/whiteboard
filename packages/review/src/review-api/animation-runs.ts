@@ -5,10 +5,22 @@
 
 import * as z from "zod";
 
-/** A canvas's report: the animation's script threw this, or nothing. */
+/** A canvas's report: the animation's script threw this, or nothing. A
+ * diagram adds what its stage found drawn wrong and how its claims about
+ * the code stand. */
 export const animationReportSchema = z.strictObject({
   blockId: z.string().min(1),
   error: z.string().max(2000).nullable(),
+  findings: z.array(z.string().max(500)).max(100).optional(),
+  claims: z
+    .strictObject({
+      matches: z.number().int().nonnegative(),
+      changed: z.number().int().nonnegative(),
+      unlinked: z.number().int().nonnegative(),
+      changedLabels: z.array(z.string().max(200)).max(20),
+      unlinkedLabels: z.array(z.string().max(200)).max(20),
+    })
+    .optional(),
 });
 
 /** A report, with the version the canvas showed when it ran. */

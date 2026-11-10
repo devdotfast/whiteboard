@@ -1,0 +1,30 @@
+<style>
+  .deliveries {
+    margin: 24px 0 0;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 16px;
+    box-sizing: border-box;
+    padding: 12px 16px;
+    border: 1px solid var(--wb-line);
+    border-radius: 8px;
+    color: var(--wb-ink);
+    font-size: 13px;
+    line-height: 20px;
+  }
+  .deliveries dt {
+    color: var(--wb-muted);
+  }
+  .deliveries dd {
+    margin: 0;
+  }
+</style>
+<div data-wb-drawing></div>
+<dl class="deliveries">
+  <dt>Billing</dt>
+  <dd data-delivery="billing"></dd>
+  <dt>Email</dt>
+  <dd data-delivery="email"></dd>
+  <dt>Audit log</dt>
+  <dd data-delivery="audit"></dd>
+</dl>

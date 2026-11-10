@@ -533,6 +533,16 @@ function documentReferences(
         ),
       );
 
+    if (element.type === "diagram")
+      return Object.entries(element.code).flatMap(([name, entry]) =>
+        select(entry.source, element.pins).map((source) => ({
+          id: animationCodeId(element.id!, name),
+          source,
+          label: entry.label ?? name,
+          peek: true,
+        })),
+      );
+
     if (element.type === "animation" || element.type === "clip")
       return Object.entries(element.code).flatMap(([name, entry]) => {
         const code = animationCode(entry);

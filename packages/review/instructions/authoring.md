@@ -1,5 +1,7 @@
 you are writing an interactive rfc-style whiteboard, for consumption by a staff engineer.
 
+Other topics, for `session_get_instructions({topic})`: `diagram` (writing a diagram), `file-lenses` (the Diff view's file lenses), `trace-archaeology` (why code exists, from past agent sessions).
+
 **plans and stacks**
 
 Keep plans and their implementation reviews together, and group reviews of an actual PR stack. Create these relationships automatically when supported by the work's history; the user need not request nesting. Choose the board structure before the authoring flow below. Use `session_list` to find the plan governing this work or the overview of this PR stack before creating one.

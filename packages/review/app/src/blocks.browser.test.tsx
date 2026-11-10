@@ -183,6 +183,9 @@ const rendered: Record<
       c,
       "[data-animation-slot='code'] .fixture-inline-editor[data-path='order.ts']",
     ) && text(c).includes("Status queued"),
+  // A diagram's stage runs its script with wb; its steps list under it.
+  diagram: (c) =>
+    has(c, "iframe[title='Order status']") && text(c).includes("SENT"),
 };
 
 let canvas: ReturnType<typeof mount> | undefined;
@@ -1795,6 +1798,102 @@ describe("block components", () => {
           ({ path, error }) =>
             path.includes("version=1") &&
             error?.includes("draw is not defined"),
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  it("lays a diagram too wide for the board's column out down, and tells the agent of one placed by hand", async () => {
+    const reports: { findings?: string[] }[] = [];
+
+    // Eight nodes in a row are far wider than the column.
+    const chain = (layout: string) =>
+      `let last;
+      for (let i = 0; i < 8; i++) {
+        const node = wb.node({ id: "n" + i, label: "Service " + i, x: i * 200, y: 0 });
+        if (last) wb.edge({ from: last, to: node, label: "HTTPS" });
+        last = node;
+      }
+      await wb.layout(${layout});`;
+
+    const wide = (block: string) =>
+      reports.some(
+        (report) =>
+          JSON.stringify(report).includes(block) &&
+          report.findings?.some((finding) =>
+            finding.includes("scrolls sideways"),
+          ),
+      );
+
+    await mountFixture("animation", {
+      document: ['{ direction: "right" }', '{ mode: "manual" }'].map(
+        (layout, index) => ({
+          id: `block-${index + 1}`,
+          type: "diagram",
+          title: "Wide",
+          script: chain(layout),
+          code: {},
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+        }),
+      ),
+      host: {
+        request: async (path, init) => {
+          if (path.includes("/animation-run"))
+            reports.push(JSON.parse(String(init?.body)));
+
+          return Response.json({ ok: true });
+        },
+      },
+    });
+
+    // Each block reports once its stage has drawn.
+    const reported = (block: string) =>
+      reports.some((report) => JSON.stringify(report).includes(block));
+
+    expect(
+      await settled(() => reported("block-1") && wide("block-2"), 8000),
+    ).toBe(true);
+    expect(wide("block-1")).toBe(false);
+  });
+
+  it("tells the agent a step label is cut off on the step bar", async () => {
+    const reports: { findings?: string[] }[] = [];
+
+    // Eight steps leave each label little room on the bar.
+    await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "diagram",
+          title: "Crowded",
+          script: `wb.node({ id: "a", label: "A" }); await wb.layout();`,
+          frames: Array.from({ length: 8 }, (_, index) => ({
+            key: `step-${index}`,
+            title: `Step ${index}`,
+            label: "A LABEL TOO LONG TO SHOW",
+          })),
+          code: {},
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+        },
+      ],
+      host: {
+        request: async (path, init) => {
+          if (path.includes("/animation-run"))
+            reports.push(JSON.parse(String(init?.body)));
+
+          return Response.json({ ok: true });
+        },
+      },
+    });
+
+    expect(
+      await settled(() =>
+        reports.some(({ findings }) =>
+          findings?.some((finding) =>
+            finding.includes(
+              "“A LABEL TOO LONG TO SHOW” is cut off on the step bar",
+            ),
+          ),
         ),
       ),
     ).toBe(true);

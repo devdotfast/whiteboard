@@ -591,8 +591,11 @@ export const DocumentNode = memo(function DocumentNode({
 
   const block = stored(node);
 
+  // A diagram keeps drawing when some of its code went stale: it marks the
+  // claims that rest on it as changed instead.
   const stale =
     block.type !== "section" &&
+    block.type !== "diagram" &&
     selectionReferences([block], {
       tolerant: true,
       repositoryId: boardRepositoryId(data.snapshot),

@@ -1,0 +1,117 @@
+[
+  {
+    "key": "play-ask",
+    "title": "The TV app asks to play",
+    "label": "ASK",
+    "caption": "One request names the episode.",
+    "code": ["tv-play"],
+    "moves": [
+      {
+        "from": "tv",
+        "to": "gateway",
+        "label": "GET /play/42"
+      }
+    ]
+  },
+  {
+    "key": "play-fan",
+    "title": "The gateway fans out",
+    "label": "FAN OUT",
+    "caption": "Manifest and title are fetched at once.",
+    "code": ["gateway-manifest", "gateway-title"],
+    "moves": [
+      {
+        "from": "gateway",
+        "to": "playback",
+        "label": "manifest?"
+      },
+      {
+        "from": "gateway",
+        "to": "catalog",
+        "label": "title?",
+        "delay": 150
+      }
+    ]
+  },
+  {
+    "key": "play-plan",
+    "title": "Playback checks the plan",
+    "label": "PLAN",
+    "code": ["playback-plan"],
+    "moves": [
+      {
+        "from": "playback",
+        "to": "accounts",
+        "label": "plan?"
+      }
+    ]
+  },
+  {
+    "key": "play-answer",
+    "title": "The answers come back",
+    "label": "ANSWER",
+    "caption": "The gateway answers once both have.",
+    "moves": [
+      {
+        "from": "playback",
+        "to": "gateway",
+        "label": "manifest"
+      },
+      {
+        "from": "catalog",
+        "to": "gateway",
+        "label": "title"
+      },
+      {
+        "from": "gateway",
+        "to": "tv",
+        "label": "200",
+        "delay": 600
+      }
+    ]
+  },
+  {
+    "key": "browse-ask",
+    "title": "The web app searches",
+    "label": "SEARCH",
+    "code": ["web-search"],
+    "moves": [
+      {
+        "from": "web",
+        "to": "gateway",
+        "label": "GET /search?q=noir"
+      }
+    ]
+  },
+  {
+    "key": "browse-catalog",
+    "title": "The catalog answers",
+    "label": "CATALOG",
+    "code": ["gateway-search"],
+    "moves": [
+      {
+        "from": "gateway",
+        "to": "catalog",
+        "label": "search"
+      }
+    ]
+  },
+  {
+    "key": "browse-answer",
+    "title": "Results come back",
+    "label": "RESULTS",
+    "moves": [
+      {
+        "from": "catalog",
+        "to": "gateway",
+        "label": "12 titles"
+      },
+      {
+        "from": "gateway",
+        "to": "web",
+        "label": "200",
+        "delay": 400
+      }
+    ]
+  }
+]

@@ -95,10 +95,22 @@ const call = (name: string, input: JsonObject) =>
 
 const block = () => store.read(sessionId).document[0]!;
 
-async function inserted() {
-  await call("session_edit", { edit: { type: "insert", content: animation } });
+/** Puts a block on the board as a person would: agents may no longer add
+ * an animation or a clip, but they still check out and update one. */
+async function inserted(content: JsonObject = animation) {
+  await store.execute(
+    {
+      operation: {
+        type: "edit",
+        reviewId: sessionId,
+        edit: { type: "insert", content },
+      },
+    },
+    undefined,
+    { kind: "person" },
+  );
 
-  return block().id!;
+  return store.read(sessionId).document.at(-1)!.id!;
 }
 
 const draftFile = (name: string) => path.join(drafts, name);
@@ -208,7 +220,7 @@ it("names the file and place of a mistake in the drafts", async () => {
   await expect(publish()).rejects.toThrow(/block\.json holds only/);
 });
 
-it("inserts an animation written as files, and later publishes update it", async () => {
+it("refuses a new animation written as files: agents draw diagrams instead", async () => {
   const { html, frames, scenarios, type: _type, ...fields } = animation;
 
   await writeFile(draftFile("animation.html"), html);
@@ -216,21 +228,136 @@ it("inserts an animation written as files, and later publishes update it", async
   await writeFile(draftFile("scenarios.json"), JSON.stringify(scenarios));
   await writeFile(draftFile("block.json"), JSON.stringify(fields));
 
+  await expect(
+    call("session_edit", { edit: { type: "insert", fromFiles: drafts } }),
+  ).rejects.toThrow(/New animation components are retired/);
+  expect(store.read(sessionId).document).toEqual([]);
+});
+
+const diagram = {
+  title: "Orders",
+  description: "How an order is stored.",
+};
+
+const DIAGRAM_SCRIPT = `const api = wb.node({ id: "api", kind: "container", label: "API" });
+const db = wb.node({ id: "db", kind: "database", label: "Orders" });
+wb.edge({ from: api, to: db, label: "SQL" });
+await wb.layout();
+`;
+
+const diagramFrames = [
+  {
+    key: "store",
+    title: "Store the order",
+    moves: [{ from: "api", to: "db", label: "INSERT" }],
+  },
+];
+
+it("inserts a diagram written as files, checks it out, and publishes updates", async () => {
+  await writeFile(draftFile("diagram.js"), DIAGRAM_SCRIPT);
+  await writeFile(draftFile("frames.json"), JSON.stringify(diagramFrames));
+  await writeFile(draftFile("block.json"), JSON.stringify(diagram));
+
   const { targetId } = (await call("session_edit", {
     edit: { type: "insert", fromFiles: drafts },
   })) as { targetId: string };
 
   expect(block()).toMatchObject({
     id: targetId,
-    type: "animation",
-    title: "Raft",
+    type: "diagram",
+    title: "Orders",
+    script: DIAGRAM_SCRIPT,
+    frames: diagramFrames,
   });
 
-  await editJson("block.json", (value) => (value.title = "Raft again"));
+  // A checkout writes the script, the frames and the rest, nothing else.
+  const fresh = path.join(drafts, "checkout");
+
+  const checkout = (await call("session_checkout", {
+    targetId,
+    dir: fresh,
+  })) as { files: Record<string, string>; next: string };
+
+  expect(Object.keys(checkout.files).sort()).toEqual([
+    "block",
+    "frames",
+    "script",
+  ]);
+  expect(checkout.next).toContain("wb.d.ts");
+  expect(
+    JSON.parse(await readFile(path.join(fresh, "block.json"), "utf8")),
+  ).toEqual({ ...diagram, code: {} });
+
+  await writeFile(
+    path.join(fresh, "diagram.js"),
+    DIAGRAM_SCRIPT.replace("Orders", "Order rows"),
+  );
   await call("session_edit", {
-    edit: { type: "update", targetId, fromFiles: drafts },
+    edit: { type: "update", targetId, fromFiles: fresh },
   });
-  expect(block()).toMatchObject({ title: "Raft again" });
+  expect(store.read(sessionId).lastEdit).toMatchObject({
+    fields: ["script"],
+  });
+  expect(block()).toMatchObject({
+    script: expect.stringContaining("Order rows"),
+  });
+});
+
+it("publishes a diagram drawn in diagram.html alone and checks it out", async () => {
+  const markup = '<ul><li>One</li><li data-wb-from="store">Two</li></ul>';
+
+  await writeFile(draftFile("diagram.html"), markup);
+  await writeFile(draftFile("frames.json"), JSON.stringify(diagramFrames));
+  await writeFile(draftFile("block.json"), JSON.stringify(diagram));
+
+  const { targetId } = (await call("session_edit", {
+    edit: { type: "insert", fromFiles: drafts },
+  })) as { targetId: string };
+
+  expect(block()).toMatchObject({ type: "diagram", html: markup });
+  expect(block()).not.toHaveProperty("script");
+
+  const fresh = path.join(drafts, "checkout");
+
+  const checkout = (await call("session_checkout", {
+    targetId,
+    dir: fresh,
+  })) as { files: Record<string, string> };
+
+  expect(Object.keys(checkout.files).sort()).toEqual([
+    "block",
+    "frames",
+    "markup",
+  ]);
+  expect(await readFile(path.join(fresh, "diagram.html"), "utf8")).toBe(markup);
+
+  // Adding a script beside the markup is an update to the script alone.
+  await writeFile(path.join(fresh, "diagram.js"), DIAGRAM_SCRIPT);
+  await call("session_edit", {
+    edit: { type: "update", targetId, fromFiles: fresh },
+  });
+  expect(store.read(sessionId).lastEdit).toMatchObject({
+    fields: ["script"],
+  });
+});
+
+it("names a schema issue in the markup by diagram.html", async () => {
+  await writeFile(draftFile("diagram.html"), "");
+  await writeFile(draftFile("block.json"), JSON.stringify(diagram));
+
+  await expect(
+    call("session_edit", { edit: { type: "insert", fromFiles: drafts } }),
+  ).rejects.toThrow(/diagram\.html/);
+});
+
+it("names diagram.js beside animation.html as a mistake", async () => {
+  await writeFile(draftFile("diagram.js"), DIAGRAM_SCRIPT);
+  await writeFile(draftFile("animation.html"), "<p>Both</p>");
+  await writeFile(draftFile("block.json"), JSON.stringify(diagram));
+
+  await expect(
+    call("session_edit", { edit: { type: "insert", fromFiles: drafts } }),
+  ).rejects.toThrow(/holds diagram\.js with animation\.html/);
 });
 
 const clip = {
@@ -244,8 +371,7 @@ const clip = {
 };
 
 it("round-trips a clip through its folder: markers.json, not frames.json", async () => {
-  await call("session_edit", { edit: { type: "insert", content: clip } });
-  const targetId = block().id!;
+  const targetId = await inserted(clip);
 
   const checkout = (await call("session_checkout", {
     targetId,
@@ -280,7 +406,7 @@ it("round-trips a clip through its folder: markers.json, not frames.json", async
     ],
   });
 
-  // A new clip from a folder of its own.
+  // A new clip from a folder of its own is refused: agents draw diagrams.
   const fresh = path.join(drafts, "fresh");
   await mkdir(fresh);
   await writeFile(path.join(fresh, "animation.html"), clip.html);
@@ -293,15 +419,9 @@ it("round-trips a clip through its folder: markers.json, not frames.json", async
     JSON.stringify({ title: "Second race" }),
   );
 
-  const inserted = (await call("session_edit", {
-    edit: { type: "insert", fromFiles: fresh },
-  })) as { targetId: string };
-
-  expect(
-    store
-      .read(sessionId)
-      .document.find((item) => item.id === inserted.targetId),
-  ).toMatchObject({ type: "clip", title: "Second race" });
+  await expect(
+    call("session_edit", { edit: { type: "insert", fromFiles: fresh } }),
+  ).rejects.toThrow(/New clip components are retired/);
 });
 
 it("refuses a folder holding both frames.json and markers.json", async () => {
@@ -323,7 +443,9 @@ it("checks out only animations", async () => {
 
   await expect(
     call("session_checkout", { targetId: block().id!, dir: drafts }),
-  ).rejects.toThrow(/is a markdown; only animations and clips check out/);
+  ).rejects.toThrow(
+    /is a markdown; only animations, clips and diagrams check out/,
+  );
 });
 
 it("hands agents whiteboard.css and whiteboard.d.ts, read-only, from checkout and the animation instructions", async () => {
@@ -367,6 +489,26 @@ it("hands agents whiteboard.css and whiteboard.d.ts, read-only, from checkout an
     (await stat(path.join(copies, "retry-backoff", "animation.html"))).mode &
       0o222,
   ).toBe(0);
+});
+
+it("hands agents wb.d.ts and the reference diagrams with the diagram instructions", async () => {
+  const instructions = await callPublicTool(
+    client,
+    tools.find((tool) => tool.name === "session_get_instructions")!,
+    { topic: "diagram" },
+  );
+
+  const text = JSON.stringify(instructions);
+  // The hint names the file by its absolute path.
+  const api = text.match(/\/[^\s"`]*\/wb\.d\.ts/)?.[0];
+
+  expect(api).toBeDefined();
+  expect((await stat(api!)).mode & 0o222).toBe(0);
+  expect(await readFile(api!, "utf8")).toContain("interface Wb");
+  expect(text).toContain("## References");
+  expect(text).toContain(
+    path.join(path.dirname(api!), "diagram-references", "request-fan-out"),
+  );
 });
 
 it("shows the agent what the script did when a canvas last ran it", async () => {

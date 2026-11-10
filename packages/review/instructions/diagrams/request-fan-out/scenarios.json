@@ -1,0 +1,12 @@
+[
+  {
+    "key": "play",
+    "label": "Play an episode",
+    "frames": ["play-ask", "play-fan", "play-plan", "play-answer"]
+  },
+  {
+    "key": "browse",
+    "label": "Search",
+    "frames": ["browse-ask", "browse-catalog", "browse-answer"]
+  }
+]

@@ -1,0 +1,42 @@
+{
+  "title": "Roll a die",
+  "description": "A three.js die, as one motion you can play and scrub.",
+  "stage": {
+    "width": 720,
+    "height": 360
+  },
+  "timeline": {
+    "chapters": [
+      {
+        "key": "shake",
+        "title": "Shake",
+        "caption": "The die rattles in the hand before the throw.",
+        "duration": 800
+      },
+      {
+        "key": "throw",
+        "title": "Throw",
+        "caption": "Thrown, it spins fast as it arcs towards the table.",
+        "duration": 700
+      },
+      {
+        "key": "bounce",
+        "title": "Bounce",
+        "caption": "It bounces twice, each lower, losing spin each time.",
+        "duration": 900
+      },
+      {
+        "key": "settle",
+        "title": "Settle",
+        "caption": "It rolls out the last of its spin and comes to rest.",
+        "duration": 900
+      },
+      {
+        "key": "result",
+        "title": "Result",
+        "caption": "Five faces up.",
+        "duration": 800
+      }
+    ]
+  }
+}

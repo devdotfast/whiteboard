@@ -1,0 +1,55 @@
+[
+  {
+    "key": "ask",
+    "title": "A request arrives",
+    "label": "REQUEST",
+    "caption": "The gateway checks the caller's bucket before anything else.",
+    "data": { "tokens": 3, "decision": "waiting" },
+    "moves": [{ "from": "client", "to": "gateway", "label": "GET /orders" }]
+  },
+  {
+    "key": "take",
+    "title": "The gateway takes a token",
+    "label": "TAKE",
+    "caption": "One script in Redis takes a token if there is one.",
+    "code": ["take-token"],
+    "data": { "tokens": 2, "decision": "allowed" },
+    "moves": [
+      { "from": "gateway", "to": "redis", "label": "take 1" },
+      { "from": "redis", "to": "gateway", "label": "2 left", "delay": 500 }
+    ]
+  },
+  {
+    "key": "forward",
+    "title": "The request goes through",
+    "label": "FORWARD",
+    "caption": "The API service answers as usual.",
+    "data": { "tokens": 2, "decision": "allowed" },
+    "moves": [
+      { "from": "gateway", "to": "api", "label": "GET /orders" },
+      { "from": "api", "to": "gateway", "label": "200", "delay": 500 },
+      { "from": "gateway", "to": "client", "label": "200", "delay": 1000 }
+    ]
+  },
+  {
+    "key": "empty",
+    "title": "The bucket is empty",
+    "label": "TAKE",
+    "caption": "A burst used every token, so Redis has none to give.",
+    "code": ["take-token"],
+    "data": { "tokens": 0, "decision": "waiting" },
+    "moves": [
+      { "from": "gateway", "to": "redis", "label": "take 1" },
+      { "from": "redis", "to": "gateway", "label": "0 left", "delay": 500 }
+    ]
+  },
+  {
+    "key": "rejected",
+    "title": "The gateway answers 429",
+    "label": "429",
+    "caption": "The API service never sees the request.",
+    "code": ["reject"],
+    "data": { "tokens": 0, "decision": "rejected" },
+    "moves": [{ "from": "gateway", "to": "client", "label": "429" }]
+  }
+]
