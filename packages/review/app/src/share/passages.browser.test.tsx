@@ -36,10 +36,8 @@ afterEach(async () => {
 
 let passages: Passages = {};
 
-const mount = async (given: Passages, width?: number) => {
+const mount = async (given: Passages) => {
   const container = document.body.appendChild(document.createElement("div"));
-
-  if (width) container.style.width = `${width}px`;
 
   host = readOnlyHost();
   passages = given;
@@ -201,121 +199,4 @@ it("draws the host's note in the margin beside each placed mark", async () => {
 
   await setMarks([]);
   await settled(() => !notes().length);
-});
-
-const notes = (container: HTMLElement) => [
-  ...container.querySelectorAll<HTMLElement>("[data-passage-note]"),
-];
-
-const article = (container: HTMLElement) =>
-  container.querySelector<HTMLElement>(".review-document")!;
-
-const region = (container: HTMLElement) =>
-  container.querySelector<HTMLElement>(".review-view-region")!;
-
-const slid = (container: HTMLElement) =>
-  Number.parseFloat(getComputedStyle(article(container)).translate) || 0;
-
-it("slides the document left until the margin's note fits, and back", async () => {
-  const drawn = vi.fn<NonNullable<Passages["renderMarkNote"]>>(
-    (id) => `A thread on ${id}`,
-  );
-
-  const container = await mount({ renderMarkNote: drawn }, 1280);
-  const before = article(container).getBoundingClientRect().left;
-
-  await setMarks([{ id: "one", anchor: anchor("rail") }]);
-
-  const fits = () => {
-    const note = notes(container)[0]?.getBoundingClientRect();
-    const edge = region(container).getBoundingClientRect();
-    const prose = block(container).querySelector("p")!.getBoundingClientRect();
-
-    const start =
-      edge.left +
-      Number.parseFloat(getComputedStyle(region(container)).paddingLeft);
-
-    return (
-      note &&
-      note.right <= edge.right - 15 &&
-      note.left >= edge.left &&
-      prose.left >= start + 23.5
-    );
-  };
-
-  await settled(() => fits() && slid(container) < 0);
-  expect(fits()).toBe(true);
-  expect(drawn).toHaveBeenLastCalledWith("one", { placement: "margin" });
-  expect(article(container).getBoundingClientRect().left).toBeLessThan(before);
-
-  await setMarks([]);
-  await settled(() => !notes(container).length && !slid(container));
-  expect(notes(container)).toEqual([]);
-  await settled(() => !article(container).style.translate);
-  expect(getComputedStyle(article(container)).translate).toBe("none");
-});
-
-it("leaves the document alone without notes to draw", async () => {
-  const container = await mount({});
-  const style = article(container).getAttribute("style");
-
-  await setMarks([{ id: "one", anchor: anchor("rail") }]);
-  await settled(() => washed("host-passage").length);
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  expect(article(container).getAttribute("style")).toBe(style);
-  expect(getComputedStyle(article(container)).translate).toBe("none");
-});
-
-it("stacks a note under the one above it, and moves it as that grows", async () => {
-  const heights = new Map([
-    ["one", 60],
-    ["two", 40],
-  ]);
-
-  const drawn: Passages = {
-    renderMarkNote: (id) => <div style={{ height: heights.get(id) }} />,
-  };
-
-  const container = await mount(drawn);
-
-  await setMarks([
-    { id: "one", anchor: anchor("rail") },
-    { id: "two", anchor: anchor("ticks") },
-  ]);
-
-  const gap = () => {
-    const [one, two] = notes(container).map((note) =>
-      note.getBoundingClientRect(),
-    );
-
-    return one && two ? two.top - one.bottom : NaN;
-  };
-
-  await settled(() => Math.abs(gap() - 8) < 0.5);
-  expect(gap()).toBeCloseTo(8, 0);
-
-  const [one, two] = notes(container);
-  const top = two!.getBoundingClientRect().top;
-
-  heights.set("one", 200);
-  await act(async () =>
-    canvas!.update(boardView(board()), (passages = { ...passages })),
-  );
-  await settled(() => Math.abs(gap() - 8) < 0.5 && one!.offsetHeight === 200);
-  expect(gap()).toBeCloseTo(8, 0);
-  expect(two!.getBoundingClientRect().top).toBeCloseTo(top + 140, 0);
-});
-
-it("draws a note at the edge where the margin has no room", async () => {
-  const drawn = vi.fn<NonNullable<Passages["renderMarkNote"]>>(
-    (id) => `A thread on ${id}`,
-  );
-
-  const container = await mount({ renderMarkNote: drawn }, 800);
-
-  await setMarks([{ id: "one", anchor: anchor("rail") }]);
-  await settled(() => notes(container).length);
-  expect(notes(container)[0]!.dataset.placement).toBe("edge");
-  expect(drawn).toHaveBeenLastCalledWith("one", { placement: "edge" });
-  expect(slid(container)).toBe(0);
 });

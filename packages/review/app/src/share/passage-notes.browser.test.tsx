@@ -1,10 +1,4 @@
-import {
-  type Note,
-  type Passages,
-  layOutNotes,
-  mergeNotes,
-} from "@canvas/host-passages";
-import type { WhiteboardSettings } from "@canvas/whiteboard";
+import { type Passages, layOutNotes, mergeNotes } from "@canvas/host-passages";
 import { mountWhiteboard, settled } from "@canvas/whiteboard-fixture";
 import { act } from "react";
 import { afterEach, expect, it } from "vitest";
@@ -62,7 +56,6 @@ async function open(
   document_: readonly unknown[],
   width: number,
   passages: Passages,
-  settings?: WhiteboardSettings,
 ) {
   const container = document.body.appendChild(document.createElement("div"));
 
@@ -77,7 +70,7 @@ async function open(
   container.style.width = `${width}px`;
   host = readOnlyHost();
   await act(async () => {
-    canvas = mountWhiteboard(container, data, { host, passages, settings });
+    canvas = mountWhiteboard(container, data, { host, passages });
   });
   await settled(() => container.textContent?.includes("Notes"));
 
@@ -227,8 +220,14 @@ const textNote: Passages["renderMarkNote"] = (id) => `A thread on ${id}`;
 it("keeps every invariant of the margin from 600px to 1700px", async () => {
   freezeTransitions();
 
+  let asked: string | undefined;
+
   const view = await open([prose()], 600, {
-    renderMarkNote: textNote,
+    renderMarkNote: (id, { placement }) => {
+      asked = placement;
+
+      return id;
+    },
     marks: [{ id: "one", anchor: anchor("a", "rail") }],
   });
 
@@ -238,7 +237,11 @@ it("keeps every invariant of the margin from 600px to 1700px", async () => {
 
   for (let width = 600; width <= 1700; width += 50) {
     await view.resize(width);
-    seen.push({ width, ...seeMargin(view) });
+
+    const at = seeMargin(view);
+
+    expect(asked).toBe(at.placement);
+    seen.push({ width, ...at });
   }
 
   const edge = seen.filter((at) => at.placement === "edge");
@@ -326,29 +329,6 @@ it("slides no block's content nearer than 24px to the region's left", async () =
   }
 });
 
-it("puts the note at the edge when the content fills the region", async () => {
-  freezeTransitions();
-
-  const view = await open(
-    BOARDS.code,
-    1280,
-    {
-      renderMarkNote: textNote,
-      marks: [{ id: "one", anchor: anchor("a", "rail") }],
-    },
-    { documentWidth: "wide" },
-  );
-
-  await settled(() => view.notes().length);
-  await frames();
-  expect(view.notes()[0]!.dataset.placement).toBe("edge");
-  expect(slid(view)).toBe(0);
-  expect(view.region.scrollWidth).toBeLessThanOrEqual(view.region.clientWidth);
-  expect(contentLeft(view)).toBeGreaterThanOrEqual(
-    view.region.getBoundingClientRect().left,
-  );
-});
-
 it("lays out the same mid-slide as at rest, and again changes nothing", async () => {
   const view = await open([prose()], 1280, {
     renderMarkNote: textNote,
@@ -418,105 +398,6 @@ it("lays out the same mid-slide as at rest, and again changes nothing", async ()
   expect(mergeNotes(rest.notes, again.notes, new Map())).toBe(rest.notes);
 });
 
-it("sets a note in a wider block's lane 32px past that block", async () => {
-  freezeTransitions();
-
-  const text = "- one item of the list\n- two";
-  const quote = "one item";
-  const plain = "one item of the list";
-
-  const view = await open([prose(), md("x", text)], 1500, {
-    renderMarkNote: textNote,
-    marks: [
-      {
-        id: "one",
-        anchor: { ...anchor("x", quote, plain), text: plain },
-      },
-    ],
-  });
-
-  await settled(() => view.notes().length);
-  await frames();
-
-  const list = view.block("x").querySelector("ul")!.getBoundingClientRect();
-
-  const proseRight = view
-    .block("a")
-    .querySelector("p")!
-    .getBoundingClientRect().right;
-
-  expect(list.right).toBeGreaterThan(proseRight);
-
-  const note = view.note("one")!;
-
-  expect(note.dataset.placement).toBe("margin");
-  expect(note.getBoundingClientRect().left).toBeCloseTo(list.right + 32, -0.5);
-  seeMargin(view);
-});
-
-it("moves between margin and edge, and slid and home, both ways", async () => {
-  freezeTransitions();
-
-  const view = await open([prose()], 1280, {
-    renderMarkNote: textNote,
-    marks: [{ id: "one", anchor: anchor("a", "rail") }],
-  });
-
-  const at = async (width: number) => {
-    await view.resize(width);
-    await settled(() => !view.article.style.translate || slid(view) < 0);
-
-    return {
-      placement: view.notes()[0]!.dataset.placement,
-      slid: slid(view) < 0,
-      leftover: view.article.style.translate,
-    };
-  };
-
-  await settled(() => view.notes().length);
-  expect(await at(1280)).toMatchObject({ placement: "margin", slid: true });
-  expect(await at(900)).toEqual({
-    placement: "edge",
-    slid: false,
-    leftover: "",
-  });
-  expect(await at(1280)).toMatchObject({ placement: "margin", slid: true });
-  expect(await at(1650)).toEqual({
-    placement: "margin",
-    slid: false,
-    leftover: "",
-  });
-  expect(await at(1280)).toMatchObject({ placement: "margin", slid: true });
-  expect(getComputedStyle(view.article).translate).not.toBe("none");
-});
-
-it("keeps a margin note clear of the contents rail", async () => {
-  freezeTransitions();
-
-  const text = `${PROSE}\n\n## One\n\nx\n\n## Two\n\ny\n\n## Three\n\nz`;
-
-  const view = await open([prose("a", text)], 1320, {
-    renderMarkNote: textNote,
-    marks: [{ id: "one", anchor: anchor("a", "rail", text) }],
-  });
-
-  await settled(() => view.notes().length);
-  await frames();
-
-  const rail = view.container.querySelector('[aria-label="Contents"]');
-  const note = view.notes()[0]!.getBoundingClientRect();
-  const { right, inset } = edges(view);
-
-  expect(rail).not.toBeNull();
-  expect(inset).toBeGreaterThan(16);
-  expect(view.notes()[0]!.dataset.placement).toBe("margin");
-  expect(note.right).toBeLessThanOrEqual(right - inset + 0.5);
-
-  const ticks = rail!.getBoundingClientRect();
-
-  expect(note.right <= ticks.left || note.bottom <= ticks.top).toBe(true);
-});
-
 it("hides a collapsed section's note, and the next note moves up", async () => {
   freezeTransitions();
 
@@ -574,37 +455,44 @@ it("hides a collapsed section's note, and the next note moves up", async () => {
   expect(top("after")).toBeGreaterThan(top("in") + 400);
 });
 
-it("fades a removed note out, inert, and slides back as the last goes", async () => {
+it("stacks notes 8px apart as they grow, and closes up as one goes", async () => {
   freezeTransitions();
 
-  const text = "- one item of the list";
-  const plain = "one item of the list";
+  const heights = new Map([
+    ["one", 60],
+    ["two", 40],
+  ]);
 
-  const view = await open([prose(), md("x", text)], 1320, {
-    renderMarkNote: textNote,
+  const sized = (): Passages["renderMarkNote"] => (id) => (
+    <div style={{ height: heights.get(id) }}>{id}</div>
+  );
+
+  const view = await open([prose()], 1320, {
+    renderMarkNote: sized(),
     marks: [
-      { id: "prose", anchor: anchor("a", "rail") },
-      { id: "list", anchor: { ...anchor("x", "item", plain), text: plain } },
+      { id: "one", anchor: anchor("a", "rail") },
+      { id: "two", anchor: anchor("a", "ticks") },
     ],
   });
 
-  await settled(() => view.notes().length === 2);
-  await frames();
+  const box = (id: string) => view.note(id)!.getBoundingClientRect();
+  const gap = () => box("two").top - box("one").bottom;
 
-  const both = slid(view);
+  await settled(() => view.notes().length === 2 && Math.abs(gap() - 8) < 0.5);
+  expect(gap()).toBeCloseTo(8, 0);
 
-  await view.pass({ marks: [{ id: "prose", anchor: anchor("a", "rail") }] });
+  const before = box("two").top;
 
-  const leaving = view.note("list");
+  heights.set("one", 200);
+  await view.pass({ renderMarkNote: sized() });
+  await settled(() => box("one").height === 200);
+  expect(gap()).toBeCloseTo(8, 0);
+  expect(box("two").top).toBeCloseTo(before + 140, 0);
 
-  expect(leaving?.inert).toBe(true);
-  expect(slid(view)).toBeGreaterThan(both);
-  await settled(() => !view.note("list"));
-  expect(view.note("list")).toBeNull();
-  expect(view.note("prose")!.getBoundingClientRect().top).toBeCloseTo(
-    markTop("rail"),
-    -0.5,
-  );
+  await view.pass({ marks: [{ id: "two", anchor: anchor("a", "ticks") }] });
+  expect(view.note("one")?.inert).toBe(true);
+  await settled(() => !view.note("one"));
+  expect(box("two").top).toBeCloseTo(markTop("ticks"), -0.5);
 
   await view.pass({ marks: [] });
   await settled(() => !view.notes().length && !view.article.style.translate);

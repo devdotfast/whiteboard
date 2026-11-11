@@ -65,7 +65,7 @@ interface Placed {
 export type NotePlacement = "margin" | "edge";
 
 /** A note as last drawn: its top and the host's node. */
-export interface Drawn {
+interface Drawn {
   top: number;
   node: ReactNode;
 }
