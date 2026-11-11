@@ -228,10 +228,14 @@ export interface SelectedPassage {
   quote: string;
 }
 
+/** In the margin past the prose, or at the article's right edge where the
+ * margin has no room. */
+export type NotePlacement = "margin" | "edge";
+
 export interface PassageMark {
   id: string;
   anchor: PassageAnchor;
-  /** Washed more deeply; its note shows where the margin has no room. */
+  /** Washed more deeply. */
   active?: boolean;
 }
 
@@ -250,9 +254,10 @@ export interface Passages {
   onMarkClick?(ids: string[]): void;
   /** The marks whose words are gone from the document. */
   onMarksResolved?(lost: string[]): void;
-  /** Given, draws each placed mark's note in the margin beside its first
-   * line. */
-  renderMarkNote?(id: string): ReactNode;
+  /** Given, draws each placed mark's note beside its first line: 308px wide
+   * in the margin, which the document slides left to make room for, or at
+   * the article's right edge, sized by the host, where it has none. */
+  renderMarkNote?(id: string, note: { placement: NotePlacement }): ReactNode;
 }
 
 /** A host that reads and edits nothing. `theme` defaults to "system",
