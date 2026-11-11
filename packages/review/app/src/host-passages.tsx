@@ -1,13 +1,11 @@
 import * as stylex from "@stylexjs/stylex";
 import {
-  type CSSProperties,
   type ReactNode,
   type RefObject,
   createContext,
   useContext,
   useEffect,
   useEffectEvent,
-  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -16,11 +14,11 @@ import {
 import { createPortal } from "react-dom";
 
 import { type AskAnchor, resolveAskAnchor } from "./ask-anchor";
-import { PASSAGE_BLOCKS, outermost, useAnchorNames } from "./ask-marks";
+import { PASSAGE_BLOCKS, outermost } from "./ask-marks";
 import { setCssHighlight } from "./css-highlights";
 import { onPlainClick, underRange } from "./passage-clicks";
 import { useReviewRoots } from "./review-root-context";
-import { space } from "./scale.stylex";
+import { motion, space } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 
 export interface SelectedPassage {
@@ -31,7 +29,7 @@ export interface SelectedPassage {
 export interface PassageMark {
   id: string;
   anchor: AskAnchor;
-  /** Washed more deeply; its note shows where the margin has no room. */
+  /** Washed more deeply. */
   active?: boolean;
 }
 
@@ -50,9 +48,10 @@ export interface Passages {
   onMarkClick?(ids: string[]): void;
   /** The marks whose words are gone from the document as drawn. */
   onMarksResolved?(lost: string[]): void;
-  /** Given, draws each placed mark's note in the margin beside its first
-   * line. */
-  renderMarkNote?(id: string): ReactNode;
+  /** Given, draws each placed mark's note beside its first line: 308px wide
+   * in the margin, which the document slides left to make room for, or at
+   * the article's right edge, sized by the host, where it has none. */
+  renderMarkNote?(id: string, note: { placement: NotePlacement }): ReactNode;
 }
 
 /** A mark's words and the review block they are anchored in. */
@@ -61,87 +60,114 @@ interface Placed {
   block: HTMLElement;
 }
 
-/** A mark's note, laid out by its block. */
-interface Note {
-  id: string;
-  block: HTMLElement;
-  blockId: string;
-  /** From the block's top to the mark's first line. */
-  offset: number;
-  /** From the block's left to the right of its lane. */
-  laneEnd: number;
-  width: number;
-  /** The margin has no room: over the article's edge, shown when active. */
-  inside: boolean;
+/** In the margin past the prose, or at the article's right edge where the
+ * margin has no room. */
+export type NotePlacement = "margin" | "edge";
+
+/** A note as last drawn: its top and the host's node. */
+interface Drawn {
+  top: number;
+  node: ReactNode;
 }
 
-const NOTE_WIDTH = 300;
+/** A mark's note, laid out from its words. */
+interface Note {
+  id: string;
+  /** In document order, which the notes stack in. */
+  order: number;
+  /** Level with its mark's first line, from the article's top. */
+  top: number;
+  /** From the article's left, past the prose or a wider block. */
+  left: number;
+  placement: NotePlacement;
+  /** Its block is drawn: a collapsed section hides it. */
+  shown: boolean;
+  /** Its mark is gone: drawn as last seen while it fades. */
+  leaving?: Drawn;
+}
 
-const NOTE_MIN_WIDTH = 200;
+const NOTE_WIDTH = 308;
 
-const NOTE_EDGE = 8;
+/** Past the prose or a wider block. */
+const NOTE_GAP = 32;
+
+/** Short of the scroll region's right edge. */
+const NOTE_INSET = 16;
+
+/** Between stacked notes. */
+const NOTE_SPACING = 8;
+
+const NOTE_FADE = 200;
 
 const NO_NOTES: readonly Note[] = [];
 
+/** Each note, and how far the article slides left for the margin's notes
+ * to fit. */
 function layOutNotes(
   article: HTMLElement,
   /** What scrolls the article: the margin runs to its edge. */
   region: HTMLElement,
   proseEnd: number,
   placed: ReadonlyMap<string, Placed>,
-): Note[] {
+) {
+  // Measured where the article sits unslid, mid-slide too.
+  const slid = Number.parseFloat(getComputedStyle(article).translate) || 0;
   const frame = article.getBoundingClientRect();
+  const left = frame.left + article.clientLeft;
+  const top = frame.top + article.clientTop;
+  const start = region.getBoundingClientRect().left + region.clientLeft;
+  const edge = start + region.clientWidth - NOTE_INSET - (left - slid);
 
-  return [...placed]
+  const room = Math.max(
+    0,
+    frame.left -
+      slid -
+      start -
+      Number.parseFloat(getComputedStyle(region).paddingLeft),
+  );
+
+  let shift = 0;
+
+  const notes = [...placed]
     .sort(([, above], [, below]) =>
       above.range.compareBoundaryPoints(Range.START_TO_START, below.range),
     )
-    .map(([id, { range, block }]) => {
-      const box = block.getBoundingClientRect();
+    .map(([id, { range, block }], order): Note => {
       const tops = [...range.getClientRects()].map((rect) => rect.top);
 
-      const start =
+      const first =
         range.startContainer instanceof Element
           ? range.startContainer
           : range.startContainer.parentElement;
 
-      const passage = start?.closest<HTMLElement>(PASSAGE_BLOCKS);
+      const passage = first?.closest<HTMLElement>(PASSAGE_BLOCKS);
 
       const lane = (
         passage ? outermost(passage, article) : block
       ).getBoundingClientRect();
 
-      const left = Math.max(
-        proseEnd,
-        lane.right - frame.left - article.clientLeft + GUTTER_GAP,
-      );
+      const x = Math.round(Math.max(proseEnd, lane.right - left + NOTE_GAP));
+      const over = x + NOTE_WIDTH - edge;
+      const placement = over > room ? "edge" : "margin";
+      const shown = block.checkVisibility();
 
-      const edge =
-        region.getBoundingClientRect().left +
-        region.clientLeft +
-        region.clientWidth -
-        frame.left -
-        article.clientLeft;
-
-      const room = edge - NOTE_EDGE - left;
+      if (shown && placement === "margin") shift = Math.max(shift, over);
 
       return {
         id,
-        block,
-        blockId: block.dataset.reviewNodeId ?? "",
-        offset: Math.round(
-          (tops.length ? Math.min(...tops) : box.top) - box.top,
+        order,
+        top: Math.round(
+          (tops.length
+            ? Math.min(...tops)
+            : block.getBoundingClientRect().top) - top,
         ),
-        laneEnd: Math.round(lane.right - box.left),
-        width: Math.round(
-          Math.min(
-            NOTE_WIDTH,
-            room < NOTE_MIN_WIDTH ? article.clientWidth - 2 * NOTE_EDGE : room,
-          ),
-        ),
-        inside: room < NOTE_MIN_WIDTH,
+        left: x,
+        placement,
+        shown,
       };
     });
+
+  return { notes, shift: Math.ceil(shift) };
 }
 
 const sameNotes = (before: readonly Note[], after: readonly Note[]) =>
@@ -151,13 +177,68 @@ const sameNotes = (before: readonly Note[], after: readonly Note[]) =>
 
     return (
       note.id === other.id &&
-      note.block === other.block &&
-      note.offset === other.offset &&
-      note.laneEnd === other.laneEnd &&
-      note.width === other.width &&
-      note.inside === other.inside
+      note.order === other.order &&
+      note.top === other.top &&
+      note.left === other.left &&
+      note.placement === other.placement &&
+      note.shown === other.shown &&
+      note.leaving === other.leaving
     );
   });
+
+/** The notes laid out now, and those whose marks just went, where they were
+ * drawn. A note keeps its place in the list, so it is never moved. */
+function mergeNotes(
+  before: readonly Note[],
+  after: readonly Note[],
+  drawn: ReadonlyMap<string, Drawn>,
+): readonly Note[] {
+  const fresh = new Map(after.map((note) => [note.id, note]));
+
+  const kept = before.flatMap((note) => {
+    const laid = fresh.get(note.id);
+
+    if (laid) {
+      fresh.delete(note.id);
+
+      return [laid];
+    }
+
+    const last = note.leaving ?? drawn.get(note.id);
+
+    return last ? [{ ...note, leaving: last }] : [];
+  });
+
+  const notes = [...kept, ...fresh.values()];
+
+  return sameNotes(before, notes) ? before : notes;
+}
+
+/** Each shown note level with its mark, or 8px under the note above it. */
+function stackNotes(
+  notes: readonly Note[],
+  heights: ReadonlyMap<string, number>,
+): ReadonlyMap<string, number> {
+  const tops = new Map<string, number>();
+  const floors = { margin: -Infinity, edge: -Infinity };
+
+  for (const note of [...notes].sort((a, b) => a.order - b.order)) {
+    if (note.leaving || !note.shown) continue;
+    const top = Math.max(note.top, floors[note.placement]);
+
+    tops.set(note.id, top);
+    floors[note.placement] = top + (heights.get(note.id) ?? 0) + NOTE_SPACING;
+  }
+
+  return tops;
+}
+
+const sameHeights = (
+  before: ReadonlyMap<string, number>,
+  after: ReadonlyMap<string, number>,
+) =>
+  before.size === after.size &&
+  [...after].every(([id, height]) => before.get(id) === height);
 
 const PassagesContext = createContext<{
   passages: Passages;
@@ -217,7 +298,17 @@ export function HostPassageMarks({
   const [article, setArticle] = useState<HTMLElement | null>(null);
   const [found, setFound] = useState<ReadonlyMap<string, Placed>>(new Map());
   const [notes, setNotes] = useState(NO_NOTES);
+  const [shift, setShift] = useState(0);
+
+  const [heights, setHeights] = useState<ReadonlyMap<string, number>>(
+    new Map(),
+  );
+
+  /** Notes drawn in place once: they may move and fade in. */
+  const [settled, setSettled] = useState<ReadonlySet<string>>(new Set());
+  const layer = useRef<HTMLDivElement>(null);
   const probe = useRef<HTMLSpanElement>(null);
+  const drawn = useRef<ReadonlyMap<string, Drawn>>(new Map());
   const render = passages?.renderMarkNote;
   const noted = Boolean(render);
   const scrollRegion = useReviewRoots()?.scrollRegionRef;
@@ -273,8 +364,13 @@ export function HostPassageMarks({
 
   // A resize can wrap a passage onto another line or narrow the margin.
   useLayoutEffect(() => {
+    const laidOut = (after: readonly Note[], by: number) => {
+      setNotes((before) => mergeNotes(before, after, drawn.current));
+      setShift(by);
+    };
+
     if (!article || !noted || !found.size) {
-      setNotes(NO_NOTES);
+      laidOut(NO_NOTES, 0);
 
       return;
     }
@@ -284,14 +380,14 @@ export function HostPassageMarks({
     const layOut = () => {
       if (!probe.current) return;
 
-      const after = layOutNotes(
+      const laid = layOutNotes(
         article,
         region,
         probe.current.offsetLeft,
         found,
       );
 
-      setNotes((before) => (sameNotes(before, after) ? before : after));
+      laidOut(laid.notes, laid.shift);
     };
 
     layOut();
@@ -306,63 +402,155 @@ export function HostPassageMarks({
     return () => resized.disconnect();
   }, [article, scrollRegion, noted, found]);
 
-  const prefix = `--note-${useId().replace(/[^a-zA-Z0-9-]/g, "")}`;
+  // A note the host grows pushes those under it down.
+  useLayoutEffect(() => {
+    const wrappers = layer.current?.querySelectorAll<HTMLElement>(
+      ":scope > [data-passage-note]",
+    );
 
-  const names = useMemo(
-    () =>
-      new Map(
-        [...new Set(notes.map((note) => note.blockId))].map((id, index) => [
-          id,
-          `${prefix}-block-${index}`,
-        ]),
-      ),
-    [notes, prefix],
+    if (!wrappers?.length) return;
+
+    const measure = () =>
+      setHeights((before) => {
+        const after = new Map(
+          [...wrappers].map((note) => [
+            note.dataset.passageNote!,
+            note.offsetHeight,
+          ]),
+        );
+
+        return sameHeights(before, after) ? before : after;
+      });
+
+    measure();
+
+    const resized = new ResizeObserver(measure);
+
+    for (const note of wrappers) resized.observe(note);
+
+    return () => resized.disconnect();
+  }, [notes]);
+
+  // A new note is drawn in place, unseen, a frame before it may move or fade
+  // in: it never travels from where it was first guessed.
+  useEffect(() => {
+    const ready = notes.flatMap((note) =>
+      !note.leaving && note.shown && heights.get(note.id) ? [note.id] : [],
+    );
+
+    if (ready.length === settled.size && ready.every((id) => settled.has(id)))
+      return;
+
+    const frame = requestAnimationFrame(() => setSettled(new Set(ready)));
+
+    return () => cancelAnimationFrame(frame);
+  }, [notes, heights, settled]);
+
+  useEffect(() => {
+    if (!notes.some((note) => note.leaving)) return;
+
+    const faded = setTimeout(
+      () => setNotes((before) => before.filter((note) => !note.leaving)),
+      NOTE_FADE,
+    );
+
+    return () => clearTimeout(faded);
+  }, [notes]);
+
+  // Slid left as far as the margin's notes overflow; back home, unslid.
+  useLayoutEffect(() => {
+    if (!article) return;
+    const { style } = article;
+    const still = matchMedia(REDUCED_MOTION).matches;
+
+    if (shift) {
+      style.transition = still ? "" : SLIDE;
+      style.translate = `${-shift}px`;
+
+      return;
+    }
+
+    if (!style.translate) return;
+    style.translate = "0px";
+
+    const home = setTimeout(
+      () => {
+        style.translate = "";
+        style.transition = "";
+      },
+      still ? 0 : NOTE_FADE,
+    );
+
+    return () => clearTimeout(home);
+  }, [article, shift]);
+
+  useLayoutEffect(
+    () => () => {
+      if (!article?.style.translate) return;
+      article.style.translate = "";
+      article.style.transition = "";
+    },
+    [article],
   );
 
-  useAnchorNames(article, names);
+  const tops = stackNotes(notes, heights);
+
+  const nodes = new Map(
+    render
+      ? notes.flatMap((note) =>
+          note.leaving
+            ? []
+            : [[note.id, render(note.id, { placement: note.placement })]],
+        )
+      : [],
+  );
+
+  useLayoutEffect(() => {
+    drawn.current = new Map(
+      [...tops].map(([id, top]) => [id, { top, node: nodes.get(id) }]),
+    );
+  });
 
   if (!article || !render) return null;
 
-  const active = new Set(marks.flatMap((mark) => (mark.active ? mark.id : [])));
-
   return createPortal(
     <div
+      ref={layer}
       {...stylex.props(styles.layer)}
       data-passage-notes=""
       data-review-copy-ignore=""
     >
       <span ref={probe} {...stylex.props(styles.probe)} />
-      {notes.map((note, index) => (
-        <div
-          key={note.id}
-          data-passage-note={note.id}
-          {...stylex.props(
-            styles.note,
-            note.inside && styles.inside,
-            note.inside && !active.has(note.id) && styles.resting,
-          )}
-          style={
-            // SAFETY: CSSProperties omits custom property names.
-            {
-              "--note-row": `${prefix}-row-${index}`,
-              "--note-above": `${prefix}-row-${index - 1}`,
-              "--note-block": names.get(note.blockId),
-              "--note-offset": `${note.offset}px`,
-              "--note-lane-end": `${note.laneEnd}px`,
-              "--note-width": `${note.width}px`,
-            } as CSSProperties
-          }
-        >
-          {render(note.id)}
-        </div>
-      ))}
+      {notes.map(({ id, placement, left, leaving }) => {
+        const top = leaving?.top ?? tops.get(id);
+
+        return (
+          <div
+            key={id}
+            data-passage-note={id}
+            data-placement={placement}
+            inert={Boolean(leaving)}
+            {...stylex.props(
+              styles.note,
+              styles[placement],
+              top === undefined && styles.hidden,
+              !leaving && !settled.has(id) && styles.fresh,
+              leaving && styles.leaving,
+            )}
+            style={{ top, left: placement === "margin" ? left : undefined }}
+          >
+            {leaving ? leaving.node : nodes.get(id)}
+          </div>
+        );
+      })}
     </div>,
     article,
   );
 }
 
-// As the Ask pins' gutter: StyleX reads no constant from another module.
-const GUTTER_GAP = 10;
+const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
+
+const SLIDE = `translate ${NOTE_FADE}ms ease`;
 
 const PROSE_END = `50% + min(100% - 2 * ${tokens.reviewDocumentPaddingInline}, ${tokens.reviewProseMaxWidth}) / 2`;
 
@@ -370,31 +558,38 @@ const styles = stylex.create({
   layer: {
     display: "contents",
   },
-  // Beside its mark's first line, past the prose or a wider block, below
-  // the note above; hidden with a collapsed section.
+  // Placed by measure, so it glides as the notes above it change.
   note: {
     position: "absolute",
-    positionAnchor: "var(--note-block)",
-    anchorName: "var(--note-row)",
-    top: `max(calc(anchor(top) + var(--note-offset)), calc(anchor(var(--note-above) bottom, -99999px) + ${space.s8}))`,
-    left: `calc(max(${PROSE_END}, anchor(left) + var(--note-lane-end)) + ${GUTTER_GAP}px)`,
-    width: "var(--note-width)",
-    positionVisibility: "anchors-visible",
+    transition: {
+      default: `top ${motion.slow} ${motion.ease}, opacity ${motion.medium} ${motion.ease}`,
+      [stylex.env.reducedMotion]: "none",
+    },
   },
-  inside: {
+  margin: {
+    width: `${NOTE_WIDTH}px`,
+  },
+  // Over the article's right edge, above the text: the host sizes it.
+  edge: {
     zIndex: 1,
-    left: "auto",
     right: space.s8,
-    filter: `drop-shadow(0 2px 6px ${tokens.shadowColorSoft})`,
   },
-  resting: {
+  // Its block is not drawn, as in a collapsed section.
+  hidden: {
     display: "none",
+  },
+  fresh: {
+    opacity: 0,
+    transition: "none",
+  },
+  leaving: {
+    opacity: 0,
   },
   // Where the margin past the prose starts. Not anchored, as the Ask pins'.
   probe: {
     position: "absolute",
     top: 0,
-    left: `calc(${PROSE_END} + ${GUTTER_GAP}px)`,
+    left: `calc(${PROSE_END} + ${NOTE_GAP}px)`,
     width: 0,
     height: 0,
     visibility: "hidden",
