@@ -25,6 +25,7 @@ export declare function WhiteboardProvider(props: {
   data: WhiteboardData;
   host: WhiteboardHost;
   settings: WhiteboardSettings;
+  passages?: Passages;
   children?: ReactNode;
 }): ReactElement;
 
@@ -234,6 +235,26 @@ export interface PassageMark {
   active?: boolean;
 }
 
+/** What a host adds to the document's text. */
+export interface Passages {
+  /** Buttons on the toolbar over selected document text. */
+  selectionActions?: readonly {
+    label: string;
+    onSelect(passage: SelectedPassage): void;
+  }[];
+  /** False leaves Copy ref off that toolbar. */
+  copyRef?: boolean;
+  /** Found again when the array changes: keep it while the marks hold. */
+  marks?: readonly PassageMark[];
+  /** A plain click on marked words, with every mark under it. */
+  onMarkClick?(ids: string[]): void;
+  /** The marks whose words are gone from the document. */
+  onMarksResolved?(lost: string[]): void;
+  /** Given, draws each placed mark's note in the margin beside its first
+   * line. */
+  renderMarkNote?(id: string): ReactNode;
+}
+
 /** A host that reads and edits nothing. `theme` defaults to "system",
  * `wasmUrl` to the shipped routing wasm and `peeks` to `staticPeeks`.
  * `setSources` hands the peeks the lines they quote. */
@@ -241,22 +262,9 @@ export declare function readOnlyHost(options?: {
   theme?: "light" | "dark" | "system";
   wasmUrl?: string;
   peeks?: (settings: PeekSettings) => PeekViewer;
-  selectionActions?: readonly {
-    label: string;
-    onSelect(passage: SelectedPassage): void;
-  }[];
-  /** False leaves Copy ref off the selection toolbar. */
-  copyRef?: boolean;
-  onMarkClick?(ids: string[]): void;
-  /** The marks whose words are gone from the document. */
-  onMarksResolved?(lost: string[]): void;
-  /** Given, draws each placed mark's note in the margin beside its first
-   * line. */
-  renderMarkNote?(id: string): ReactNode;
 }): WhiteboardHost &
   Disposable & {
     setSources(code: BoardSources): Promise<void>;
-    setMarks(marks: readonly PassageMark[]): void;
   };
 
 /** Lines of one file at one commit; `fromLine` is 1-based. */

@@ -1,4 +1,3 @@
-import type { PassageHost, PassageMark } from "@canvas/host-passages";
 import type { WhiteboardHost } from "@canvas/whiteboard";
 import type {
   ReviewDiffLayout,
@@ -24,15 +23,6 @@ export type SharePeeks = (
 export interface ShareHost extends WhiteboardHost, ReviewDisposable {
   /** Hands the peeks the lines they quote. */
   setSources(code: BoardSources): Promise<void>;
-  setMarks(marks: readonly PassageMark[]): void;
-}
-
-export interface SharePassages {
-  selectionActions?: PassageHost["actions"];
-  copyRef?: boolean;
-  onMarkClick?: PassageHost["onDidClickMarks"];
-  onMarksResolved?: PassageHost["onDidResolveMarks"];
-  renderMarkNote?: PassageHost["renderNote"];
 }
 
 // Shipped beside the package's index.js; Vite serves it from node_modules in
@@ -60,16 +50,12 @@ function listeners<T>() {
 }
 
 /** A read-only host: no requests, no diff, and every verb a no-op. */
-export function shareHost(
-  options: {
-    theme: ReviewTheme;
-    wasmUrl: string;
-    peeks: SharePeeks;
-  } & SharePassages,
-): ShareHost {
+export function shareHost(options: {
+  theme: ReviewTheme;
+  wasmUrl: string;
+  peeks: SharePeeks;
+}): ShareHost {
   let lineNumbers = false;
-  let marks: readonly PassageMark[] = [];
-  const markListeners = listeners<void>();
 
   const layouts: Record<ReviewDiffLayoutScope, ReviewDiffLayout> = {
     diff: "split",
@@ -102,19 +88,6 @@ export function shareHost(
     async setSources(code) {
       await peeks.setSources?.(code);
     },
-    passages: {
-      actions: options.selectionActions,
-      hideCopyRef: options.copyRef === false,
-      marks: () => marks,
-      onDidChangeMarks: (listener) => markListeners.add(listener),
-      onDidClickMarks: options.onMarkClick,
-      onDidResolveMarks: options.onMarksResolved,
-      renderNote: options.renderMarkNote,
-    },
-    setMarks(next) {
-      marks = next;
-      markListeners.fire();
-    },
     diffView: {
       files: async () => [],
       create: () => ({
@@ -137,8 +110,6 @@ export function shareHost(
     },
     ready() {},
     dispose() {
-      markListeners.clear();
-
       for (const set of [
         events,
         lineNumberListeners,
@@ -156,7 +127,7 @@ export function readOnlyHost(
     theme?: ReviewTheme;
     wasmUrl?: string;
     peeks?: SharePeeks;
-  } & SharePassages = {},
+  } = {},
 ): ShareHost {
   return shareHost({
     ...options,

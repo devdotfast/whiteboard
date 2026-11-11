@@ -1,4 +1,4 @@
-import type { SelectedPassage } from "@canvas/host-passages";
+import type { Passages, SelectedPassage } from "@canvas/host-passages";
 import { mountWhiteboard, settled } from "@canvas/whiteboard-fixture";
 import { act } from "react";
 import { afterEach, expect, it, vi } from "vitest";
@@ -34,17 +34,23 @@ afterEach(async () => {
   document.body.replaceChildren();
 });
 
-const mount = async (options: Parameters<typeof readOnlyHost>[0]) => {
+let passages: Passages = {};
+
+const mount = async (given: Passages) => {
   const container = document.body.appendChild(document.createElement("div"));
 
-  host = readOnlyHost(options);
+  host = readOnlyHost();
+  passages = given;
   await act(async () => {
-    canvas = mountWhiteboard(container, boardView(board()), { host });
+    canvas = mountWhiteboard(container, boardView(board()), { host, passages });
   });
   await settled(() => container.textContent?.includes(TEXT));
 
   return container;
 };
+
+const setMarks = (marks: Passages["marks"], data = boardView(board())) =>
+  act(async () => canvas!.update(data, (passages = { ...passages, marks })));
 
 const washed = (name: string) =>
   [...(CSS.highlights.get(name) ?? [])].map((range) => String(range));
@@ -106,19 +112,17 @@ it("washes the host's marks, the active one apart, and names the lost", async ()
   const lost = vi.fn<(ids: string[]) => void>();
   const container = await mount({ onMarksResolved: lost });
 
-  await act(async () =>
-    host!.setMarks([
-      { id: "one", anchor: anchor("rail") },
-      { id: "two", anchor: anchor("every change"), active: true },
-      { id: "gone", anchor: { ...anchor("rail"), blockId: "missing" } },
-    ]),
-  );
+  await setMarks([
+    { id: "one", anchor: anchor("rail") },
+    { id: "two", anchor: anchor("every change"), active: true },
+    { id: "gone", anchor: { ...anchor("rail"), blockId: "missing" } },
+  ]);
   await settled(() => washed("host-passage").length);
   expect(washed("host-passage")).toEqual(["rail"]);
   expect(washed("host-passage-active")).toEqual(["every change"]);
   expect(lost).toHaveBeenLastCalledWith(["gone"]);
 
-  await act(async () => host!.setMarks([]));
+  await setMarks([]);
   await settled(() => !washed("host-passage").length);
   expect(washed("host-passage-active")).toEqual([]);
   expect(container.textContent).toContain(TEXT);
@@ -127,15 +131,13 @@ it("washes the host's marks, the active one apart, and names the lost", async ()
 it("keeps a mark on its words after an edit ahead of them", async () => {
   const container = await mount({});
 
-  await act(async () =>
-    host!.setMarks([{ id: "one", anchor: anchor("ticks") }]),
-  );
+  await setMarks([{ id: "one", anchor: anchor("ticks") }]);
   await settled(() => washed("host-passage").length);
 
   const edited = `Now ${TEXT}`;
 
   await act(async () =>
-    canvas!.update(boardView({ ...board(edited), version: 2 })),
+    canvas!.update(boardView({ ...board(edited), version: 2 }), passages),
   );
   await settled(() => container.textContent?.includes(edited));
   await settled(() => washed("host-passage")[0] === "ticks");
@@ -146,9 +148,7 @@ it("tells the host of a plain click on marked words", async () => {
   const clicked = vi.fn<(ids: string[]) => void>();
   const container = await mount({ onMarkClick: clicked });
 
-  await act(async () =>
-    host!.setMarks([{ id: "one", anchor: anchor("rail") }]),
-  );
+  await setMarks([{ id: "one", anchor: anchor("rail") }]);
   await settled(() => washed("host-passage").length);
 
   const [words] = CSS.highlights.get("host-passage")!;
@@ -183,12 +183,10 @@ it("draws the host's note in the margin beside each placed mark", async () => {
     ...container.querySelectorAll<HTMLElement>("[data-passage-note]"),
   ];
 
-  await act(async () =>
-    host!.setMarks([
-      { id: "one", anchor: anchor("rail") },
-      { id: "gone", anchor: { ...anchor("rail"), blockId: "missing" } },
-    ]),
-  );
+  await setMarks([
+    { id: "one", anchor: anchor("rail") },
+    { id: "gone", anchor: { ...anchor("rail"), blockId: "missing" } },
+  ]);
   await settled(() => notes().length);
   expect(notes().map((note) => note.textContent)).toEqual(["A thread on one"]);
 
@@ -199,6 +197,6 @@ it("draws the host's note in the margin beside each placed mark", async () => {
   expect(note.getBoundingClientRect().top).toBeGreaterThanOrEqual(words.top);
   expect(note.getBoundingClientRect().top).toBeLessThan(words.bottom);
 
-  await act(async () => host!.setMarks([]));
+  await setMarks([]);
   await settled(() => !notes().length);
 });
