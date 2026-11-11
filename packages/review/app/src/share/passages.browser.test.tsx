@@ -173,3 +173,32 @@ it("tells the host of a plain click on marked words", async () => {
   });
   expect(clicked).toHaveBeenCalledWith(["one"]);
 });
+
+it("draws the host's note in the margin beside each placed mark", async () => {
+  const container = await mount({
+    renderMarkNote: (id) => `A thread on ${id}`,
+  });
+
+  const notes = () => [
+    ...container.querySelectorAll<HTMLElement>("[data-passage-note]"),
+  ];
+
+  await act(async () =>
+    host!.setMarks([
+      { id: "one", anchor: anchor("rail") },
+      { id: "gone", anchor: { ...anchor("rail"), blockId: "missing" } },
+    ]),
+  );
+  await settled(() => notes().length);
+  expect(notes().map((note) => note.textContent)).toEqual(["A thread on one"]);
+
+  const note = notes()[0]!;
+  const words = block(container).getBoundingClientRect();
+
+  expect(note.getBoundingClientRect().left).toBeGreaterThan(words.left);
+  expect(note.getBoundingClientRect().top).toBeGreaterThanOrEqual(words.top);
+  expect(note.getBoundingClientRect().top).toBeLessThan(words.bottom);
+
+  await act(async () => host!.setMarks([]));
+  await settled(() => !notes().length);
+});

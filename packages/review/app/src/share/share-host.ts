@@ -32,6 +32,7 @@ export interface SharePassages {
   copyRef?: boolean;
   onMarkClick?: PassageHost["onDidClickMarks"];
   onMarksResolved?: PassageHost["onDidResolveMarks"];
+  renderMarkNote?: PassageHost["renderNote"];
 }
 
 // Shipped beside the package's index.js; Vite serves it from node_modules in
@@ -108,6 +109,7 @@ export function shareHost(
       onDidChangeMarks: (listener) => markListeners.add(listener),
       onDidClickMarks: options.onMarkClick,
       onDidResolveMarks: options.onMarksResolved,
+      renderNote: options.renderMarkNote,
     },
     setMarks(next) {
       marks = next;

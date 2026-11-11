@@ -153,12 +153,15 @@ export function openAskConversations(
   );
 }
 
-const PASSAGE_BLOCKS =
+export const PASSAGE_BLOCKS =
   "p, li, blockquote, pre, td, th, dd, figcaption, h1, h2, h3, h4, h5, h6";
 
 /** The outermost list or table a block is in, within the article; else the
  * block itself. */
-function outermost(block: HTMLElement, article: HTMLElement): HTMLElement {
+export function outermost(
+  block: HTMLElement,
+  article: HTMLElement,
+): HTMLElement {
   let lane = block;
 
   for (
@@ -179,7 +182,7 @@ const CONTAINER_BLOCKS = "ul, ol, dl, table";
  * the document's elements: a board's blocks belong to its editor, which
  * takes any change to them for an edit and draws the block afresh, losing
  * the name and the words a wash was drawn over. */
-function useAnchorNames(
+export function useAnchorNames(
   article: HTMLElement | null,
   names: ReadonlyMap<string, string>,
 ) {

@@ -230,7 +230,7 @@ export interface SelectedPassage {
 export interface PassageMark {
   id: string;
   anchor: PassageAnchor;
-  /** Washed more deeply. */
+  /** Washed more deeply; its note shows where the margin has no room. */
   active?: boolean;
 }
 
@@ -250,6 +250,9 @@ export declare function readOnlyHost(options?: {
   onMarkClick?(ids: string[]): void;
   /** The marks whose words are gone from the document. */
   onMarksResolved?(lost: string[]): void;
+  /** Given, draws each placed mark's note in the margin beside its first
+   * line. */
+  renderMarkNote?(id: string): ReactNode;
 }): WhiteboardHost &
   Disposable & {
     setSources(code: BoardSources): Promise<void>;
