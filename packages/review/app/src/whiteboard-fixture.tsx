@@ -6,6 +6,7 @@ import * as stylex from "@stylexjs/stylex";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 
+import type { Passages } from "./host-passages";
 import { CanvasUiContext } from "./host/canvas-ui";
 import { ReviewContainerProvider } from "./review-root-context";
 import { testReviewBridge } from "./review-session-test-utils";
@@ -71,14 +72,17 @@ export function mountWhiteboard(
   options: {
     host?: WhiteboardHost;
     settings?: WhiteboardSettings;
+    passages?: Passages;
     ui?: ReviewCanvasUi;
   } = {},
-): ReviewDisposable & { update(data: WhiteboardData): void } {
+): ReviewDisposable & {
+  update(data: WhiteboardData, passages?: Passages): void;
+} {
   container.classList.add("review-canvas-root");
   const root = createRoot(container);
   const host = options.host ?? fixtureHost();
 
-  const render = (shown: WhiteboardData) =>
+  const render = (shown: WhiteboardData, passages = options.passages) =>
     root.render(
       <ReviewContainerProvider container={container}>
         <CanvasUiContext.Provider value={options.ui}>
@@ -87,6 +91,7 @@ export function mountWhiteboard(
               data={shown}
               host={host}
               settings={options.settings ?? {}}
+              passages={passages}
             >
               <ReviewTopBar />
               <Whiteboard />

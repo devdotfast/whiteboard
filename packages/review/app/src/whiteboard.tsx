@@ -42,7 +42,7 @@ import { CanvasQueryProvider, useCanvasQueryScope } from "./canvas-query";
 import { ReviewDebugSettingsProvider } from "./debug-settings";
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
 import { DrawQueueProvider } from "./draw-queue-provider";
-import { HostPassagesProvider, type PassageHost } from "./host-passages";
+import { HostPassagesProvider, type Passages } from "./host-passages";
 import { CanvasUiContext } from "./host/canvas-ui";
 import {
   type ReviewSession,
@@ -88,7 +88,6 @@ export interface WhiteboardData extends ApiDocumentData {
 
 export interface WhiteboardHost extends ReviewCanvasBridge {
   find?: ReviewFindHost;
-  passages?: PassageHost;
 }
 
 export type WhiteboardSettings = ReviewCanvasSettings;
@@ -102,11 +101,13 @@ export function WhiteboardProvider({
   data,
   host,
   settings,
+  passages,
   children,
 }: {
   data: WhiteboardData;
   host: WhiteboardHost;
   settings: WhiteboardSettings;
+  passages?: Passages;
   children: ReactNode;
 }) {
   const { snapshot } = data;
@@ -226,7 +227,7 @@ export function WhiteboardProvider({
                                           <AskHistoryProvider>
                                             <AskDesktopSync />
                                             <HostPassagesProvider
-                                              host={host.passages}
+                                              passages={passages}
                                               version={snapshot.version}
                                             >
                                               <AgentSelectionProvider

@@ -1,19 +1,17 @@
-import type { ReviewDisposable } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import {
   type CSSProperties,
   type ReactNode,
   type RefObject,
   createContext,
-  useCallback,
   useContext,
   useEffect,
+  useEffectEvent,
   useId,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
 } from "react";
 import { createPortal } from "react-dom";
 
@@ -37,23 +35,24 @@ export interface PassageMark {
   active?: boolean;
 }
 
-export interface PassageHost {
+/** What a host adds to the document's text. */
+export interface Passages {
   /** Buttons on the toolbar over selected document text. */
-  actions?: readonly {
+  selectionActions?: readonly {
     label: string;
     onSelect(passage: SelectedPassage): void;
   }[];
-  /** Leaves Copy ref off that toolbar. */
-  hideCopyRef?: boolean;
-  marks(): readonly PassageMark[];
-  onDidChangeMarks(listener: () => void): ReviewDisposable;
+  /** False leaves Copy ref off that toolbar. */
+  copyRef?: boolean;
+  /** Found again when the array changes: keep it while the marks hold. */
+  marks?: readonly PassageMark[];
   /** A plain click on marked words, with every mark under it. */
-  onDidClickMarks?(ids: string[]): void;
+  onMarkClick?(ids: string[]): void;
   /** The marks whose words are gone from the document as drawn. */
-  onDidResolveMarks?(lost: string[]): void;
+  onMarksResolved?(lost: string[]): void;
   /** Given, draws each placed mark's note in the margin beside its first
    * line. */
-  renderNote?(id: string): ReactNode;
+  renderMarkNote?(id: string): ReactNode;
 }
 
 /** A mark's words and the review block they are anchored in. */
@@ -161,35 +160,32 @@ const sameNotes = (before: readonly Note[], after: readonly Note[]) =>
   });
 
 const PassagesContext = createContext<{
-  host: PassageHost;
+  passages: Passages;
   version: number;
 } | null>(null);
 
 /** `version` is the board drawn: a live board redraws under one revision. */
 export function HostPassagesProvider({
-  host,
+  passages,
   version,
   children,
 }: {
-  host: PassageHost | undefined;
+  passages: Passages | undefined;
   version: number;
   children: ReactNode;
 }) {
   const value = useMemo(
-    () => (host ? { host, version } : null),
-    [host, version],
+    () => (passages ? { passages, version } : null),
+    [passages, version],
   );
 
   return <PassagesContext value={value}>{children}</PassagesContext>;
 }
 
-export const useHostPassages = () => useContext(PassagesContext)?.host ?? null;
+export const useHostPassages = () =>
+  useContext(PassagesContext)?.passages ?? null;
 
 const NO_MARKS: readonly PassageMark[] = [];
-
-const noMarks = () => NO_MARKS;
-
-const never = () => () => {};
 
 /** What a click in the article does itself: the notes, links and controls. */
 const CLICKABLE =
@@ -203,36 +199,33 @@ export function HostPassageMarks({
   articleRef: RefObject<HTMLElement | null>;
   revision: string;
 }): ReactNode {
-  const host = useHostPassages();
+  const passages = useHostPassages();
   const version = useContext(PassagesContext)?.version;
+  const shown = Boolean(passages);
+  const marks = passages?.marks ?? NO_MARKS;
 
-  const subscribe = useCallback(
-    (listener: () => void) => {
-      if (!host) return never();
-      const subscription = host.onDidChangeMarks(listener);
-
-      return () => subscription.dispose();
-    },
-    [host],
+  const resolved = useEffectEvent((lost: string[]) =>
+    passages?.onMarksResolved?.(lost),
   );
 
-  const marks = useSyncExternalStore(
-    subscribe,
-    () => host?.marks() ?? NO_MARKS,
-    noMarks,
+  const clicked = useEffectEvent((ids: string[]) =>
+    passages?.onMarkClick?.(ids),
   );
+
+  const clickable = Boolean(passages?.onMarkClick);
 
   const [article, setArticle] = useState<HTMLElement | null>(null);
   const [found, setFound] = useState<ReadonlyMap<string, Placed>>(new Map());
   const [notes, setNotes] = useState(NO_NOTES);
   const probe = useRef<HTMLSpanElement>(null);
-  const render = host?.renderNote;
+  const render = passages?.renderMarkNote;
+  const noted = Boolean(render);
   const scrollRegion = useReviewRoots()?.scrollRegionRef;
 
   useEffect(() => setArticle(articleRef.current), [articleRef, revision]);
 
   useEffect(() => {
-    if (!article || !host) return;
+    if (!article || !shown) return;
 
     const frame = requestAnimationFrame(() => {
       const ranges = new Map<string, Placed>();
@@ -255,7 +248,7 @@ export function HostPassageMarks({
       setCssHighlight(article, "host-passage", washed(false));
       setCssHighlight(article, "host-passage-active", washed(true), 1);
       setFound(ranges);
-      host.onDidResolveMarks?.(lost);
+      resolved(lost);
     });
 
     return () => {
@@ -263,13 +256,11 @@ export function HostPassageMarks({
       setCssHighlight(article, "host-passage", []);
       setCssHighlight(article, "host-passage-active", []);
     };
-  }, [article, host, marks, revision, version]);
+  }, [article, shown, marks, revision, version]);
 
   // Only a plain click: a drag, a selection or a modifier is the reader's own.
   useEffect(() => {
-    const clicked = host?.onDidClickMarks;
-
-    if (!article || !clicked || !found.size) return;
+    if (!article || !clickable || !found.size) return;
 
     return onPlainClick(article, CLICKABLE, (event) => {
       const hit = [...found].flatMap(([id, { range }]) =>
@@ -278,11 +269,11 @@ export function HostPassageMarks({
 
       if (hit.length) clicked(hit);
     });
-  }, [article, host, found]);
+  }, [article, clickable, found]);
 
   // A resize can wrap a passage onto another line or narrow the margin.
   useLayoutEffect(() => {
-    if (!article || !render || !found.size) {
+    if (!article || !noted || !found.size) {
       setNotes(NO_NOTES);
 
       return;
@@ -313,7 +304,7 @@ export function HostPassageMarks({
     for (const { block } of found.values()) resized.observe(block);
 
     return () => resized.disconnect();
-  }, [article, scrollRegion, render, found]);
+  }, [article, scrollRegion, noted, found]);
 
   const prefix = `--note-${useId().replace(/[^a-zA-Z0-9-]/g, "")}`;
 

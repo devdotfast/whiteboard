@@ -84,7 +84,7 @@ export function AgentSelectionProvider({
 }) {
   const session = useReviewSession();
   const passages = useHostPassages();
-  const copyRef = !passages?.hideCopyRef;
+  const copyRef = passages?.copyRef !== false;
   const { theme } = useReviewDebugSettings();
   const panels = useOptionalReviewPanelStore();
   // Ask needs a panel to answer in and a host that runs agents (Desktop).
@@ -329,7 +329,7 @@ export function AgentSelectionProvider({
 
   // A host's own actions are for document text with a place in a block.
   const text =
-    passages?.actions?.length &&
+    passages?.selectionActions?.length &&
     selection?.target.kind === "text" &&
     selection.range
       ? { anchor: askAnchor(selection.range), quote: selection.target.quote }
@@ -440,7 +440,7 @@ export function AgentSelectionProvider({
                 </>
               ) : null}
               {passage
-                ? passages!.actions!.map((action) => (
+                ? passages!.selectionActions!.map((action) => (
                     <Button
                       key={action.label}
                       variant="ghost"
