@@ -65,13 +65,13 @@ interface Placed {
 export type NotePlacement = "margin" | "edge";
 
 /** A note as last drawn: its top and the host's node. */
-interface Drawn {
+export interface Drawn {
   top: number;
   node: ReactNode;
 }
 
 /** A mark's note, laid out from its words. */
-interface Note {
+export interface Note {
   id: string;
   /** In document order, which the notes stack in. */
   order: number;
@@ -105,7 +105,8 @@ const NOTE_FADE = 200;
 const NO_NOTES: readonly Note[] = [];
 
 /** The left of the leftmost content drawn in `parent`, through wrappers as
- * wide as it: a block's box spans the article, its content is centred. */
+ * wide as it: a block's box spans the article, its content is centred. A
+ * control hung left of its row, as a section's chevron, counts. */
 function contentLeft(parent: Element, box: DOMRectReadOnly): number {
   let left = Infinity;
 
@@ -122,15 +123,30 @@ function contentLeft(parent: Element, box: DOMRectReadOnly): number {
         (node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim(),
       );
 
-    left = Math.min(left, wrapper ? contentLeft(child, rect) : rect.left);
+    if (wrapper) {
+      left = Math.min(left, contentLeft(child, rect));
+      continue;
+    }
+
+    left = Math.min(left, rect.left);
+
+    for (const hung of child.children) {
+      const box = hung.getBoundingClientRect();
+
+      if (box.width) left = Math.min(left, box.left);
+    }
   }
 
   return left;
 }
 
+/** To layout's 1/64px: mid-slide, a measure through the translate is a hair
+ * off, enough to tip a whole pixel. */
+const snap = (px: number) => Math.round(px * 64) / 64;
+
 /** Each note, and how far the article slides left for the margin's notes
  * to fit. */
-function layOutNotes(
+export function layOutNotes(
   article: HTMLElement,
   /** What scrolls the article: the margin runs to its edge. */
   region: HTMLElement,
@@ -168,11 +184,13 @@ function layOutNotes(
   // The content may slide into the article's padding, not near the region's.
   const room = Math.max(
     0,
-    (Number.isFinite(content) ? content : inner) -
-      slid -
-      start -
-      Number.parseFloat(around.paddingLeft) -
-      CONTENT_INSET,
+    snap(
+      (Number.isFinite(content) ? content : inner) -
+        slid -
+        start -
+        Number.parseFloat(around.paddingLeft) -
+        CONTENT_INSET,
+    ),
   );
 
   let shift = 0;
@@ -196,7 +214,7 @@ function layOutNotes(
       ).getBoundingClientRect();
 
       const x = Math.round(Math.max(proseEnd, lane.right - left + NOTE_GAP));
-      const over = x + NOTE_WIDTH - edge;
+      const over = snap(x + NOTE_WIDTH - edge);
       const placement = over > room ? "edge" : "margin";
       const shown = block.checkVisibility();
 
@@ -237,7 +255,7 @@ const sameNotes = (before: readonly Note[], after: readonly Note[]) =>
 
 /** The notes laid out now, and those whose marks just went, where they were
  * drawn. A note keeps its place in the list, so it is never moved. */
-function mergeNotes(
+export function mergeNotes(
   before: readonly Note[],
   after: readonly Note[],
   drawn: ReadonlyMap<string, Drawn>,
@@ -264,7 +282,7 @@ function mergeNotes(
 }
 
 /** Each shown note level with its mark, or 8px under the note above it. */
-function stackNotes(
+export function stackNotes(
   notes: readonly Note[],
   heights: ReadonlyMap<string, number>,
 ): ReadonlyMap<string, number> {
