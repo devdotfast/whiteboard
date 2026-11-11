@@ -50,11 +50,13 @@ packages/code-graph/canvas/public/snapshot*.json
 !/.claude/
 /.claude/*
 !/.claude/skills/
+!/.claude/settings.json
 .pi-subagents/
 .claude-context
 .codex-context
 .codex/*
 !.codex/config.toml
+!.codex/hooks.json
 .dev/reviews/*
 .dev/profiles/
 .code-graph/

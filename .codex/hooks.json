@@ -1,0 +1,56 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v dev >/dev/null 2>&1 || echo '{\"systemMessage\":\"This repository shares agent sessions through dev.fast, but dev is not installed. Run: npx @dev.fast/cli setup\"}'"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v dev >/dev/null 2>&1 && dev hook --origin https://stg.dev.fast --org dev-fast-h09g || true"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v dev >/dev/null 2>&1 && dev hook --origin https://stg.dev.fast --org dev-fast-h09g || true"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v dev >/dev/null 2>&1 && dev hook --origin https://stg.dev.fast --org dev-fast-h09g || true"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v dev >/dev/null 2>&1 && dev hook --origin https://stg.dev.fast --org dev-fast-h09g || true"
+          }
+        ]
+      }
+    ]
+  }
+}
