@@ -221,7 +221,7 @@ it("slides the document left until the margin's note fits, and back", async () =
     (id) => `A thread on ${id}`,
   );
 
-  const container = await mount({ renderMarkNote: drawn }, 1360);
+  const container = await mount({ renderMarkNote: drawn }, 1280);
   const before = article(container).getBoundingClientRect().left;
 
   await setMarks([{ id: "one", anchor: anchor("rail") }]);
@@ -229,8 +229,18 @@ it("slides the document left until the margin's note fits, and back", async () =
   const fits = () => {
     const note = notes(container)[0]?.getBoundingClientRect();
     const edge = region(container).getBoundingClientRect();
+    const prose = block(container).querySelector("p")!.getBoundingClientRect();
 
-    return note && note.right <= edge.right - 15 && note.left >= edge.left;
+    const start =
+      edge.left +
+      Number.parseFloat(getComputedStyle(region(container)).paddingLeft);
+
+    return (
+      note &&
+      note.right <= edge.right - 15 &&
+      note.left >= edge.left &&
+      prose.left >= start + 23.5
+    );
   };
 
   await settled(() => fits() && slid(container) < 0);

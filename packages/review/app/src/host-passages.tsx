@@ -91,15 +91,42 @@ const NOTE_WIDTH = 308;
 /** Past the prose or a wider block. */
 const NOTE_GAP = 32;
 
-/** Short of the scroll region's right edge. */
+/** Short of the scroll region's right edge, or of the contents rail. */
 const NOTE_INSET = 16;
 
 /** Between stacked notes. */
 const NOTE_SPACING = 8;
 
+/** How near the region's left the slide may bring the document's content. */
+const CONTENT_INSET = 24;
+
 const NOTE_FADE = 200;
 
 const NO_NOTES: readonly Note[] = [];
+
+/** The left of the leftmost content drawn in `parent`, through wrappers as
+ * wide as it: a block's box spans the article, its content is centred. */
+function contentLeft(parent: Element, box: DOMRectReadOnly): number {
+  let left = Infinity;
+
+  for (const child of parent.children) {
+    const rect = child.getBoundingClientRect();
+
+    if (!rect.width) continue;
+
+    const wrapper =
+      child.childElementCount > 0 &&
+      rect.left - box.left < 1 &&
+      box.right - rect.right < 1 &&
+      ![...child.childNodes].some(
+        (node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim(),
+      );
+
+    left = Math.min(left, wrapper ? contentLeft(child, rect) : rect.left);
+  }
+
+  return left;
+}
 
 /** Each note, and how far the article slides left for the margin's notes
  * to fit. */
@@ -111,19 +138,41 @@ function layOutNotes(
   placed: ReadonlyMap<string, Placed>,
 ) {
   // Measured where the article sits unslid, mid-slide too.
-  const slid = Number.parseFloat(getComputedStyle(article).translate) || 0;
+  const own = getComputedStyle(article);
+  const slid = Number.parseFloat(own.translate) || 0;
   const frame = article.getBoundingClientRect();
   const left = frame.left + article.clientLeft;
   const top = frame.top + article.clientTop;
+  const around = getComputedStyle(region);
   const start = region.getBoundingClientRect().left + region.clientLeft;
-  const edge = start + region.clientWidth - NOTE_INSET - (left - slid);
 
+  const inset = Math.max(
+    NOTE_INSET,
+    Number.parseFloat(around.getPropertyValue("--review-rail-gutter")) || 0,
+  );
+
+  const edge = start + region.clientWidth - inset - (left - slid);
+  const inner = left + Number.parseFloat(own.paddingLeft);
+
+  const content = contentLeft(
+    article,
+    new DOMRectReadOnly(
+      inner,
+      frame.top,
+      article.clientWidth -
+        Number.parseFloat(own.paddingLeft) -
+        Number.parseFloat(own.paddingRight),
+    ),
+  );
+
+  // The content may slide into the article's padding, not near the region's.
   const room = Math.max(
     0,
-    frame.left -
+    (Number.isFinite(content) ? content : inner) -
       slid -
       start -
-      Number.parseFloat(getComputedStyle(region).paddingLeft),
+      Number.parseFloat(around.paddingLeft) -
+      CONTENT_INSET,
   );
 
   let shift = 0;
