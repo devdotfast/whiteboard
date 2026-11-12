@@ -97,6 +97,10 @@ jobs:
           path: apps/review-desktop/code-oss/**/node_modules
           key: ${{ steps.native-cache.outputs.cache-primary-key }}
       - name: Build desktop
+        env:
+          # Embeds the PostHog project key into the review runtime build so
+          # released apps ship telemetry enabled. Source builds embed nothing.
+          REVIEW_POSTHOG_KEY: ${{ vars.REVIEW_POSTHOG_KEY }}
         run: pnpm desktop:build
       - name: Wait for the remote pin
         id: pin
