@@ -74,6 +74,56 @@ describe("agent-trace-hooks", () => {
     expect(preserved.customKey).toBe("customValue");
   });
 
+  it("keeps Claude Code settings saved with a UTF-8 byte order mark", async () => {
+    const homeDir = await makeTempHome();
+    const settingsPath = path.join(homeDir, ".claude", "settings.json");
+    await mkdir(path.dirname(settingsPath), { recursive: true });
+    await writeFile(
+      settingsPath,
+      '\uFEFF{\r\n  "model": "opus",\r\n  "permissions": { "allow": ["Bash(ls)"] }\r\n}\r\n',
+      "utf8",
+    );
+
+    const result = await installClaudeTraceHook(homeDir);
+    expect(result.modified).toBe(true);
+
+    const content = JSON.parse(await readFile(settingsPath, "utf8"));
+    expect(content.model).toBe("opus");
+    expect(content.permissions).toEqual({ allow: ["Bash(ls)"] });
+    expect(content.hooks.SessionStart[0].hooks[0].command).toBe(
+      "whiteboard trace hook SessionStart",
+    );
+
+    await writeFile(
+      settingsPath,
+      `\uFEFF${await readFile(settingsPath, "utf8")}`,
+      "utf8",
+    );
+    expect((await describeTraceHookOwners(homeDir)).claude).not.toBeNull();
+    expect(await removeAgentTraceHook("claude", homeDir)).toBe(true);
+    const removed = JSON.parse(await readFile(settingsPath, "utf8"));
+    expect(removed.model).toBe("opus");
+    expect(removed.hooks).toEqual({});
+  });
+
+  it("leaves a Claude Code settings file it cannot parse unchanged", async () => {
+    const homeDir = await makeTempHome();
+    const settingsPath = path.join(homeDir, ".claude", "settings.json");
+    await mkdir(path.dirname(settingsPath), { recursive: true });
+
+    for (const original of [
+      '{\n  "model": "opus",\n  "env": { "A": "1" },\n}\n',
+      "[]\n",
+    ]) {
+      await writeFile(settingsPath, original, "utf8");
+
+      await expect(installClaudeTraceHook(homeDir)).rejects.toThrow(
+        settingsPath,
+      );
+      expect(await readFile(settingsPath, "utf8")).toBe(original);
+    }
+  });
+
   it("adds the Codex heartbeat to an existing lifecycle-only setup", async () => {
     const homeDir = await makeTempHome();
     const codexDir = path.join(homeDir, ".codex");

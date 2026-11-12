@@ -343,13 +343,25 @@ export async function installClaudeTraceHook(
   let parsed: JsonObject = {};
 
   if (existsSync(settingsPath)) {
-    try {
-      const content = parseJsonText(await readFile(settingsPath, "utf8"));
+    const text = await readClaudeSettingsText(homeDir);
+    let content: JsonValue = {};
+    let problem = "it is not a JSON object";
 
-      if (isJsonObject(content)) parsed = content;
-    } catch {
-      parsed = {};
+    try {
+      if (text.trim() !== "") content = parseJsonText(text);
+    } catch (error) {
+      problem = error instanceof Error ? error.message : String(error);
+      content = null;
     }
+
+    // Writing over a file this cannot read would drop every other setting.
+    if (!isJsonObject(content)) {
+      throw new Error(
+        `Whiteboard left ${settingsPath} unchanged and added no trace hooks: ${problem}. Fix the file and try again.`,
+      );
+    }
+
+    parsed = content;
   }
 
   const hooks: JsonObject = isJsonObject(parsed.hooks) ? parsed.hooks : {};
@@ -584,7 +596,7 @@ export async function removeAgentTraceHook(
     let parsed: JsonValue;
 
     try {
-      parsed = parseJsonText(await readFile(settingsPath, "utf8"));
+      parsed = parseJsonText(await readClaudeSettingsText(homeDir));
     } catch {
       return false;
     }
@@ -774,6 +786,13 @@ async function readTextOrEmpty(filePath: string): Promise<string> {
   return existsSync(filePath) ? readFile(filePath, "utf8") : "";
 }
 
+/** Windows editors and PowerShell often save UTF-8 with a byte order mark. */
+async function readClaudeSettingsText(homeDir: string): Promise<string> {
+  const text = await readTextOrEmpty(claudeSettingsPath(homeDir));
+
+  return text.replace(/^\uFEFF/, "");
+}
+
 /**
  * The directory one harness keeps its own configuration in. A machine without
  * that directory does not run the harness, so an install writes it no hook.
@@ -821,9 +840,7 @@ export async function describeTraceHookOwners(
   let claude: TraceHookOwner | null = null;
 
   try {
-    const parsed = parseJsonText(
-      await readTextOrEmpty(claudeSettingsPath(homeDir)),
-    );
+    const parsed = parseJsonText(await readClaudeSettingsText(homeDir));
 
     const hooks = isJsonObject(parsed) ? parsed.hooks : undefined;
     const groups = isJsonObject(hooks) ? hooks.SessionStart : undefined;
