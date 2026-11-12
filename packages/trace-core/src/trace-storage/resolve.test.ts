@@ -43,7 +43,7 @@ describe("trace storage selection", () => {
     writeFileSync(filePath, JSON.stringify(value));
   }
 
-  function writeLegacyEnv(): string {
+  function writeLegacyEnv(newline = "\n"): string {
     const dir = path.join(home, ".config", "dev-trace");
     mkdirSync(dir, { recursive: true });
     const envPath = path.join(dir, "env");
@@ -55,7 +55,7 @@ describe("trace storage selection", () => {
         'export TRACE_R2_ACCESS_KEY_ID="legacy-key"',
         'export TRACE_R2_SECRET_ACCESS_KEY="legacy-secret"',
         "",
-      ].join("\n"),
+      ].join(newline),
     );
 
     return envPath;
@@ -73,6 +73,20 @@ describe("trace storage selection", () => {
       kind: "s3",
       endpoint: "https://legacy.example.invalid",
       bucket: "legacy-traces",
+      region: "auto",
+    });
+  });
+
+  it("reads a legacy env file saved with CRLF line endings", () => {
+    writeLegacyEnv("\r\n");
+    const selection = selectTraceStorage({ env, homeDir: home });
+    expect(selection).toMatchObject({ mode: "s3", explicit: false });
+    expect(selection.s3?.source).toBe("legacy-file");
+    expect(selection.s3?.credentials).toEqual({
+      endpoint: "https://legacy.example.invalid",
+      bucket: "legacy-traces",
+      accessKeyId: "legacy-key",
+      secretAccessKey: "legacy-secret",
       region: "auto",
     });
   });
