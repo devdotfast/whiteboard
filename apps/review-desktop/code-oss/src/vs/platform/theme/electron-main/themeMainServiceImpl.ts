@@ -43,7 +43,11 @@ class Setting<T> {
 namespace Setting {
 	export const DETECT_COLOR_SCHEME = new Setting<boolean>('window.autoDetectColorScheme', false);
 	export const DETECT_HC = new Setting<boolean>('window.autoDetectHighContrast', true);
-	export const SYSTEM_COLOR_THEME = new Setting<'default' | 'auto' | 'light' | 'dark'>('window.systemColorTheme', 'default');
+	// Review: match the window's native appearance to the color theme, not the
+	// OS. A light theme on a dark Mac otherwise gets dark-appearance traffic
+	// lights, which wash out against the light titlebar.
+	// KEEP IN SYNC WITH `reviewConfigurationDefaults` in review/common/reviewConfigurationDefaults.ts.
+	export const SYSTEM_COLOR_THEME = new Setting<'default' | 'auto' | 'light' | 'dark'>('window.systemColorTheme', 'auto');
 	export const AUXILIARYBAR_DEFAULT_VISIBILITY = new Setting<'hidden' | 'visibleInWorkspace' | 'visible' | 'maximizedInWorkspace' | 'maximized'>('workbench.secondarySideBar.defaultVisibility', 'visibleInWorkspace');
 	export const STARTUP_EDITOR = new Setting<'none' | 'welcomePage' | 'readme' | 'newUntitledFile' | 'welcomePageInEmptyWorkbench' | 'terminal' | 'agentSessionsWelcomePage'>('workbench.startupEditor', 'welcomePage');
 }
