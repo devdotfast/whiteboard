@@ -4,7 +4,7 @@ import { boardTitle } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { ReactElement } from "react";
-import { z } from "zod";
+import * as z from "zod";
 
 import { canvasQueryKeys } from "./canvas-query";
 import { countLabel } from "./format";

@@ -1,7 +1,7 @@
 import { AgentSelectionSchema } from "@review/agent-selection";
 import { askAgentIds } from "@review/ask/thread-state";
 import { createContext } from "react";
-import { z } from "zod";
+import * as z from "zod";
 
 import {
   type ReviewClientConfig,

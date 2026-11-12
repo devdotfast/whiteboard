@@ -7,7 +7,7 @@ import { gzip } from "node:zlib";
 import { ReviewBugReportMetaV2Schema } from "@dev.fast/review-protocol";
 import type { PostHogCaptureProperties } from "@review/posthog-capture-client";
 import type { ReviewTelemetry } from "@review/review-telemetry";
-import { z } from "zod";
+import * as z from "zod";
 
 const CRASH_REPORT_URL = "https://bug.dev.fast/api/v2/crashes";
 

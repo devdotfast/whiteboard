@@ -8,7 +8,7 @@ import {
   reviewHostStatus,
 } from "@dev.fast/review-protocol";
 import { legacyModeSchema } from "@review/review-api/review-progress.js";
-import { z } from "zod";
+import * as z from "zod";
 
 import type { GatewayHosts, GatewayRemote } from "./review-gateway-hosts.js";
 import { type ListSource, mergeLists } from "./review-gateway-list.js";

@@ -12,7 +12,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { z } from "zod";
+import * as z from "zod";
 
 import { useReviewSession } from "./host/review-session";
 import { radius } from "./scale.stylex";

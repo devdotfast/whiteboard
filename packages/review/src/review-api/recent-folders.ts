@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { z } from "zod";
+import * as z from "zod";
 
 export interface RecentFoldersEnvironment {
   homeDir?: string;

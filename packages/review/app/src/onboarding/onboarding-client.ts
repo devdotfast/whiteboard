@@ -17,7 +17,7 @@ import {
   askOfferSchema,
 } from "@review/ask/thread-state";
 import type { UiTelemetryEventName } from "@review/ui-telemetry-events";
-import { z } from "zod";
+import * as z from "zod";
 
 export interface OnboardingConnection {
   serverUrl: string;

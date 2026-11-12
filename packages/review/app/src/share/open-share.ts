@@ -6,7 +6,7 @@ import {
 } from "@dev.fast/review-protocol";
 import { shareBundleSchema } from "@dev.fast/review-share-protocol";
 import { traceSchema } from "@review/review-api/trace-schema";
-import { z } from "zod";
+import * as z from "zod";
 
 import { boardSnapshotSchema, boardView } from "./board-data";
 import { readOnlyHost } from "./share-host";

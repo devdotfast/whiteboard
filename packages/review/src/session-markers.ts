@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { parseJsonText } from "@dev.fast/review-protocol";
 import { writeFileAtomic } from "@dev.fast/trace-core";
-import { z } from "zod";
+import * as z from "zod";
 
 import type { PostHogCaptureProperties } from "./posthog-capture-client";
 import { devReviewHome } from "./review-home-paths";

@@ -4,7 +4,7 @@ import {
   type ReviewGatewayHostState,
 } from "@dev.fast/review-protocol";
 import { Agent } from "undici";
-import { z } from "zod";
+import * as z from "zod";
 
 import {
   FIRST_RETRY_MS,

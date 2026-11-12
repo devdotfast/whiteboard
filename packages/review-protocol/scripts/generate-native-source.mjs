@@ -37,7 +37,7 @@ if (!isValidArgs) {
 
 const HEADER = [
   "// GENERATED from @dev.fast/review-protocol. Do not edit.",
-  'import { z } from "zod/v4";',
+  'import * as z from "zod/v4";',
   "",
   "z.config({ jitless: true });",
   "",

@@ -1,7 +1,7 @@
 import { blockSchema } from "@dev.fast/whiteboard-document";
 import { boardLinkPreview } from "@review/review-api/link-preview.js";
 import { expect, it } from "vitest";
-import { z } from "zod";
+import * as z from "zod";
 
 const document = z.array(blockSchema).parse([
   {

@@ -3,7 +3,7 @@
 // published threw. Kept in memory: a restart forgets it, and the next canvas
 // to draw the animation reports again.
 
-import { z } from "zod";
+import * as z from "zod";
 
 /** A canvas's report: the animation's script threw this, or nothing. */
 export const animationReportSchema = z.strictObject({

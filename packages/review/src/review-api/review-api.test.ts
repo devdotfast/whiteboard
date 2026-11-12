@@ -13,7 +13,7 @@ import { ReviewInputError, rangeAnchor } from "@dev.fast/whiteboard-document";
 import { createGlobalReviewServer } from "@review/server/desktop-server.js";
 import { GlobalReviewDesktopVerbRelay } from "@review/server/global-verb-relay.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { z } from "zod";
+import * as z from "zod";
 
 import { type AuthoringTool, callAuthoringTool } from "./agent-client.js";
 import { authoringTools } from "./authoring-tools.js";

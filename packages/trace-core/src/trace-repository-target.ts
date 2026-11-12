@@ -10,7 +10,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { resolveRepoContext } from "@dev.fast/local-vcs";
-import { z } from "zod";
+import * as z from "zod";
 
 import { writePrivateJsonAtomic } from "./atomic-write";
 import { StoreApiError, type StoreClient } from "./store-client";

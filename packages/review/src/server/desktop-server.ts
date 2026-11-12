@@ -56,7 +56,7 @@ import {
 } from "@review/review-telemetry";
 import { remoteShare } from "@review/sharing/host.js";
 import { Hono } from "hono";
-import { z } from "zod";
+import * as z from "zod";
 
 import { aliasInstallationToAccount } from "./account-alias";
 import { CrashReportRequestSchema, reportCrashDump } from "./crash-report";

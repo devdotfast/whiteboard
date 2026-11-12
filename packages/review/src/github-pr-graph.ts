@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as z from "zod";
 
 export type RunGitHubApi = (host: string, endpoint: string) => Promise<string>;
 

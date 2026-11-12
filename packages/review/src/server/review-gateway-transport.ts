@@ -6,7 +6,7 @@ import {
   REVIEW_CLIENT_REMOTE,
 } from "@dev.fast/review-protocol";
 import { type Dispatcher, request } from "undici";
-import { z } from "zod";
+import * as z from "zod";
 
 import { StreamLimitError } from "./bounded-stream.js";
 import type { GatewayHosts, GatewayRemote } from "./review-gateway-hosts.js";

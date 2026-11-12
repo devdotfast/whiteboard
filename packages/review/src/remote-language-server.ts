@@ -4,7 +4,7 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
 import { processStartIdentity, withFileLock } from "@dev.fast/trace-core";
-import { z } from "zod";
+import * as z from "zod";
 
 import { findReviewPackageRoot } from "./package-paths";
 import { ensureRemoteExtensions, remoteServerPaths } from "./remote-extensions";

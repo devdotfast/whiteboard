@@ -7,7 +7,7 @@ import {
   publishedEdits,
 } from "@dev.fast/whiteboard-document";
 import type { Tool } from "@modelcontextprotocol/server";
-import { z } from "zod";
+import * as z from "zod";
 
 import { desktopBlockTypes, instructionsQuerySchema } from "./instructions.js";
 import { uploadSchema } from "./local-data.js";

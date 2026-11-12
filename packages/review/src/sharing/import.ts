@@ -36,7 +36,7 @@ import {
   migrateStoredDocument,
   migrateStoredLenses,
 } from "@review/stored-document-migration.js";
-import { z } from "zod";
+import * as z from "zod";
 
 import { referenceCommits, validateShareSources } from "./export.js";
 import {

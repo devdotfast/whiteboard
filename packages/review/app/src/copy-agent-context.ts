@@ -1,6 +1,6 @@
 import { copyText } from "@canvas/ui/copy";
 import type { AgentSelection } from "@review/agent-selection";
-import { z } from "zod";
+import * as z from "zod";
 
 import type { ReviewSession } from "./host/review-session";
 

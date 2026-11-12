@@ -89,6 +89,7 @@
     "jsx-a11y/role-has-required-aria-props": "off",
     "no-unmodified-loop-condition": "off",
     "oxc/no-accumulating-spread": "error",
+    "zod-imports/namespace": "error",
     "anti-slop/no-array-filter-map": "error",
     "anti-slop/no-reduce-accumulator-copy": "error",
     "anti-slop/require-readable-spacing": "error",
@@ -116,6 +117,10 @@
     {
       "name": "canvas-styles",
       "specifier": "./tools/oxlint/canvas-styles/index.ts"
+    },
+    {
+      "name": "zod-imports",
+      "specifier": "./tools/oxlint/zod-imports/index.ts"
     },
     {
       "name": "stylex",

@@ -11,7 +11,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 import { parseJsonText } from "@dev.fast/json";
-import { z } from "zod";
+import * as z from "zod";
 
 import { findReviewPackageRoot } from "./package-paths";
 import { downloadPinned } from "./pinned-download";
