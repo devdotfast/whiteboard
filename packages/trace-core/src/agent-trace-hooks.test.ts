@@ -143,6 +143,41 @@ command = "review trace hook SessionEnd"
     expect(await readFile(codex.path, "utf8")).toBe('model = "gpt-5"\n');
     expect(existsSync(pi.path)).toBe(false);
   });
+
+  it("recognizes its Codex hooks in a config.toml with CRLF line endings", async () => {
+    const crlf = (text: string) => text.replace(/\n/g, "\r\n");
+
+    // An empty config gets the marked block; an existing one gets bare tables.
+    for (const before of ["", 'model = "gpt-5"\n']) {
+      const homeDir = await makeTempHome();
+      const configPath = agentTraceHookPath("codex", homeDir);
+      await mkdir(path.dirname(configPath), { recursive: true });
+      await writeFile(configPath, before);
+      await installCodexTraceHook(homeDir);
+      const lf = `${await readFile(configPath, "utf8")}\n[profiles.fast]\nmodel = "o3"\n`;
+
+      // What remove leaves of the same file in LF.
+      await writeFile(configPath, lf);
+      await removeAgentTraceHook("codex", homeDir);
+      const removedLf = await readFile(configPath, "utf8");
+      expect(removedLf).not.toContain("hooks");
+
+      await writeFile(configPath, crlf(lf));
+
+      expect((await installCodexTraceHook(homeDir)).modified).toBe(false);
+      expect(await readFile(configPath, "utf8")).toBe(crlf(lf));
+      expect((await describeTraceHookOwners(homeDir)).codex).toBe("review");
+
+      expect(await removeAgentTraceHook("codex", homeDir)).toBe(true);
+      expect(await readFile(configPath, "utf8")).toBe(crlf(removedLf));
+
+      // Hooks added to a CRLF config are written with CRLF too.
+      expect((await installCodexTraceHook(homeDir)).modified).toBe(true);
+      const reinstalled = await readFile(configPath, "utf8");
+      expect(reinstalled.replace(/\r\n/g, "")).not.toContain("\n");
+      expect((await describeTraceHookOwners(homeDir)).codex).toBe("review");
+    }
+  });
 });
 
 describe("the OpenCode configuration base", () => {
