@@ -1,0 +1,7 @@
+{
+  "subagents": {
+    "projectRootResolution": "git-root",
+    "agentExcludeDirs": ["../.agents/skills", "../.agents/plugins"]
+  },
+  "packages": ["npm:pi-subagents@0.79.2"]
+}
