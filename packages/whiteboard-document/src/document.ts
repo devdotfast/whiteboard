@@ -4,7 +4,7 @@ import {
   isJsonObject,
   isStringValue,
 } from "@dev.fast/json";
-import { z } from "zod";
+import * as z from "zod";
 
 import { animationCode } from "./blocks/animation.js";
 import {

@@ -21,7 +21,7 @@ import {
 import type { AskThreadHooks } from "@review/ask/thread.js";
 import { readBoundedRequestJson } from "@review/server/hono-http.js";
 import type { Hono } from "hono";
-import { z } from "zod";
+import * as z from "zod";
 
 import type { AskRecord } from "./ask-history.js";
 import type { AskHost } from "./http.js";

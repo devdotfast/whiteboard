@@ -13,7 +13,7 @@ import {
   lensTargetsSchema,
   respellLinks,
 } from "@dev.fast/whiteboard-document";
-import { z } from "zod";
+import * as z from "zod";
 
 import {
   ATTACHMENT_KEYS,

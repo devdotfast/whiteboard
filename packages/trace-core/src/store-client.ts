@@ -26,7 +26,7 @@ import {
   storeResponseSchema,
   storeRoutes,
 } from "@dev.fast/trace-protocol";
-import { z } from "zod";
+import * as z from "zod";
 
 import { requestStoreAuthorization } from "./store-authorization";
 

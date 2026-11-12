@@ -24,7 +24,7 @@ import {
   it,
   vi,
 } from "vitest";
-import { z } from "zod";
+import * as z from "zod";
 
 import { runReviewAgentCli } from "./agent-cli.js";
 import * as agentClient from "./agent-client.js";

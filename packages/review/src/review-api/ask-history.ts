@@ -12,7 +12,7 @@ import {
   askOfferSchema,
   askPermissionsSchema,
 } from "@review/ask/thread-state.js";
-import { z } from "zod";
+import * as z from "zod";
 
 /** A saved Ask conversation: its history entry, and how to reopen it. */
 export const askRecordSchema = askHistoryEntrySchema.extend({

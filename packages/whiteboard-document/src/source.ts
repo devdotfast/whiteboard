@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as z from "zod";
 
 const label = z.string().trim().min(1);
 

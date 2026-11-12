@@ -1,5 +1,5 @@
 import { isObjectValue, jsonValueSchema } from "@dev.fast/review-protocol";
-import { z } from "zod";
+import * as z from "zod";
 
 const softwareElementTypeSchema = z.enum([
   "person",

@@ -17,7 +17,7 @@ import {
 } from "@dev.fast/whiteboard-document";
 import type { ReviewProgress } from "@review/review-api/review-progress";
 import type { Snapshot } from "@review/review-api/store";
-import { z } from "zod";
+import * as z from "zod";
 
 export interface BoardImage {
   bytes: Uint8Array<ArrayBuffer>;

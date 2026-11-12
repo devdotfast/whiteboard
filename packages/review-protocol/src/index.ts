@@ -3,7 +3,7 @@ export * from "@dev.fast/diffr";
 export * from "./structural-diff.js";
 
 import type { JsonValue } from "@dev.fast/json";
-import { z } from "zod";
+import * as z from "zod";
 
 export {
   parseReviewCodePeekPatch,

@@ -68,7 +68,7 @@ import {
 import { forgetSharedCommits } from "@review/sharing/repository.js";
 import type { ReviewSessionAgent } from "@review/ui-telemetry-events.js";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
-import { z } from "zod";
+import * as z from "zod";
 
 import { anchorQuotes } from "./anchor-quotes.js";
 import {

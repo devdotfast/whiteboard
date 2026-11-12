@@ -32,7 +32,7 @@ import { mountSharingPublisher } from "@review/sharing/host.js";
 import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { z } from "zod";
+import * as z from "zod";
 
 import { mountFeedback } from "./feedback";
 import type { ReviewDesktopVerbRelay } from "./global-verb-relay";

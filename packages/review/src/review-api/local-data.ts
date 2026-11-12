@@ -74,7 +74,7 @@ import {
   SoftwareModelValidationError,
   defineSoftwareMap,
 } from "@review/software-map-model.js";
-import { z } from "zod";
+import * as z from "zod";
 
 import { checkoutFs } from "./checkout-fs.js";
 import {

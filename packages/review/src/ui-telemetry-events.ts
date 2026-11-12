@@ -28,7 +28,7 @@ import {
   jsonString,
 } from "@dev.fast/review-protocol";
 import { SELECTION_UNAVAILABLE_REASONS } from "@dev.fast/whiteboard-document";
-import { z } from "zod";
+import * as z from "zod";
 
 import { askAgentIds } from "./ask/thread-state";
 import { containsFilePath, hasPossibleUserInfo } from "./telemetry-clean-text";

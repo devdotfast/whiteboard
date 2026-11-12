@@ -19,7 +19,7 @@ import type { Pins } from "@dev.fast/whiteboard-document";
 import { reviewManagedCheckoutRoot } from "@review/review-checkout-paths.js";
 import { runPrepareCommand } from "@review/review-prepare.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { z } from "zod";
+import type * as z from "zod";
 
 import { createReviewApi } from "./http.js";
 import { openLocalReviewStore } from "./local-data.js";

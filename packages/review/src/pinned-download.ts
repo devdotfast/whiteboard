@@ -7,7 +7,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream as WebReadableStream } from "node:stream/web";
 
-import { z } from "zod";
+import * as z from "zod";
 
 const DOWNLOAD_TIMEOUT_MS = 120_000;
 

@@ -32,7 +32,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { z } from "zod";
+import * as z from "zod";
 
 import { AgentChatUserMessage, trayBubbleStyles } from "./agent-chat";
 import {

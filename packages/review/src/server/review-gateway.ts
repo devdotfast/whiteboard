@@ -10,7 +10,7 @@ import {
 } from "@dev.fast/review-protocol";
 import { Hono } from "hono";
 import type { Dispatcher } from "undici";
-import { z } from "zod";
+import * as z from "zod";
 
 import { StreamLimitError, readBoundedStream } from "./bounded-stream.js";
 import type { ReviewDesktopVerbRelay } from "./global-verb-relay.js";

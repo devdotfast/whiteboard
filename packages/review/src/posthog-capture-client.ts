@@ -5,7 +5,7 @@ import path from "node:path";
 import { type JsonValue, jsonValueSchema } from "@dev.fast/json";
 import { parseJsonText } from "@dev.fast/review-protocol";
 import { withFileLock, writeFileAtomic } from "@dev.fast/trace-core";
-import { z } from "zod";
+import * as z from "zod";
 
 import { EMBEDDED_PROGRESSIVE_REVIEW_POSTHOG_KEY } from "./embedded-posthog-key";
 import { DEV_REVIEW_HOME_ENV, devReviewHome } from "./review-home-paths";

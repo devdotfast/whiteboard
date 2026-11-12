@@ -165,7 +165,7 @@ describe("native Review Protocol source generation", () => {
     );
     await writeFile(
       path.join(sourceRoot, "index.ts"),
-      ['import { z } from "zod";', 'export * from "./contracts.js";', ""].join(
+      ['import * as z from "zod";', 'export * from "./contracts.js";', ""].join(
         "\n",
       ),
     );

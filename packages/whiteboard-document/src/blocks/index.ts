@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as z from "zod";
 
 import { animation } from "./animation.js";
 import { call_stack_diff } from "./call_stack_diff.js";

@@ -1,6 +1,6 @@
 import { isStringValue } from "@dev.fast/review-protocol";
 import type { Dispatch, SetStateAction } from "react";
-import { z } from "zod";
+import * as z from "zod";
 import { persist } from "zustand/middleware";
 import { createStore } from "zustand/vanilla";
 

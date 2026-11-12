@@ -2,7 +2,7 @@ import {
   ReviewInputError,
   type SourcePins,
 } from "@dev.fast/whiteboard-document";
-import { z } from "zod";
+import * as z from "zod";
 
 // Query schemas for the read routes Desktop and review_get call. http.ts
 // parses query strings with them, and authoring-tools.ts publishes get's.

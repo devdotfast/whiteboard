@@ -3,7 +3,7 @@ import {
   ReviewAgentTraceEventSchema,
   ReviewAgentTraceSessionSchema,
 } from "@dev.fast/trace-protocol";
-import { z } from "zod";
+import * as z from "zod";
 
 import type { BoardIconKind } from "./board-icons.js";
 import type { ReviewApiSummary } from "./review-api-client.js";

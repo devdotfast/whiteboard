@@ -30,7 +30,7 @@ import {
 } from "@review/ask/thread.js";
 import { AskThreads } from "@review/ask/threads.js";
 import { expect, it, vi } from "vitest";
-import { z } from "zod";
+import * as z from "zod";
 
 const permissionOptions = [
   { optionId: "allow", name: "Allow once", kind: "allow_once" as const },

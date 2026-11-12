@@ -7,7 +7,7 @@ import {
 } from "@dev.fast/review-share-protocol";
 import { ReviewInputError } from "@dev.fast/whiteboard-document";
 import { slugify } from "@review/slug.js";
-import { z } from "zod";
+import * as z from "zod";
 
 export const WHITEBOARD_FILE_EXTENSION = ".whiteboard";
 

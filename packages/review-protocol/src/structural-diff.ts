@@ -7,7 +7,7 @@ import {
   type StructuralUpdate,
   type StructuralVisibility,
 } from "@dev.fast/diffr";
-import { z } from "zod";
+import * as z from "zod";
 
 // Review transport errors are separate from diffr file outcomes.
 const ReviewStructuralDiffErrorSchema = z.object({

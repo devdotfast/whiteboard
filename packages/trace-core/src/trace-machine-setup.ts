@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { parseJsonText } from "@dev.fast/json";
-import { z } from "zod";
+import * as z from "zod";
 
 import { writeFileAtomicAsync } from "./atomic-write";
 import { clearTraceEnvCache } from "./review-agent-traces";

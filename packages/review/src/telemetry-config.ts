@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 
 import type { JsonValue } from "@dev.fast/review-protocol";
-import { z } from "zod";
+import * as z from "zod";
 
 import { findReviewPackageRoot } from "./package-paths";
 import { DEV_REVIEW_HOME_ENV, devReviewHome } from "./review-home-paths";

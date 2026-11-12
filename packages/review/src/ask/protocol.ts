@@ -16,7 +16,7 @@ import {
   type AskSelect,
   askChoiceKinds,
 } from "@review/ask/thread-state.js";
-import { z } from "zod";
+import * as z from "zod";
 
 /** Claude's adapter names the MCP server behind an `mcp__*` permission here. */
 const claudeMcpMetaSchema = z.object({

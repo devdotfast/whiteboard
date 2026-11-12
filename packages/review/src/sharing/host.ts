@@ -21,7 +21,7 @@ import type { LocalReviewData } from "@review/review-api/local-data.js";
 import type { ReviewStore } from "@review/review-api/store.js";
 import { readBoundedRequestJson } from "@review/server/hono-http.js";
 import type { Hono } from "hono";
-import { z } from "zod";
+import * as z from "zod";
 
 import { readSharingAuth } from "./auth.js";
 import { ShareAuthError, ShareClient, ShareRequestError } from "./client.js";

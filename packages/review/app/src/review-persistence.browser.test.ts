@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { z } from "zod";
+import * as z from "zod";
 import { persist } from "zustand/middleware";
 import { createStore } from "zustand/vanilla";
 

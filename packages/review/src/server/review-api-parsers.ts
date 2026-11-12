@@ -5,7 +5,7 @@ import {
 } from "@dev.fast/review-protocol";
 import type { ReviewTabTelemetryEvent } from "@review/telemetry";
 import { REVIEW_TELEMETRY_TABS } from "@review/ui-telemetry-events";
-import { z } from "zod";
+import * as z from "zod";
 
 import { HttpJsonError } from "./http-json";
 
