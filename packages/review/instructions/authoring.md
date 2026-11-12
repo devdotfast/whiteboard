@@ -14,6 +14,18 @@ Keep plans and their implementation reviews together, and group reviews of an ac
 - Nest only one level: plan or overview → change boards. Update existing boards after rebases instead of creating duplicates. If `session_create` returns an existing PR board, preserve its relationships unless the current task establishes a reason to change them. Use `session_set_parent` and `session_set_dependencies` only for the supported relationships above.
 - Link the children from the overview and link the parent from each child with `[label](whiteboard:board/<sessionId>)`. Read the overview and all children back to check their targets, parent, dependency order, and links.
 
+**every new change board opens on a hero**
+Before any section, make one `animation` the board's first block, with nothing above it (read `session_get_instructions({topic:"animation"})` first). The reader sees it edge to edge, so it must explain the whole change in seconds. Then write the usual sections below it. If animations are unavailable, make one `sequence` or `flow_diagram` the first block instead. Plans and overviews need no hero.
+
+A good hero is one concrete scenario in the old world and the new world, side by side, labelled Before and After. Its shape follows the nature of the change, so do not reuse a generic boxes-and-columns stage:
+
+- a change a person sees: draw the literal UI on both sides, the same action on both, and let the difference be the only thing that differs. Keep real labels and real strings from the code.
+- a change in behavior with no UI: name one real request or input, and show what happens to it in each world.
+- a contract or refactor: show the signature diff, a real call, and what it returned on each side. If the result is the same, that is the point. Keep it static.
+- a tiny change: one static before/after is enough.
+
+Rules: no scenarios (a hero has one path). Use 1–4 frames, or one frame with the whole picture. Use motion only where something changes; if motion adds nothing, keep it static. Few words, real names, no made-up jargon. The first frame must already show the difference. Each frame's title is a short claim and its caption one sentence of evidence. Run the real code on both versions when it is cheap to do so, and draw what it did. Render the hero with `session_render` and fix what looks wrong.
+
 **flow**
 For each board, follow these first five steps in order, with no tool calls beyond what they need: loading the tools they use (`session_create`, `session_activity_begin`, `session_edit`, `session_get`, and later `session_activity_update` and `session_activity_end`) and, for a PR, reading its description (`gh pr view`).
 
@@ -21,9 +33,9 @@ For each board, follow these first five steps in order, with no tool calls beyon
 - for a change board only, trigger a subagent with this exact instruction: "Call `session_get_instructions({topic:\"file-lenses\"})` and follow it for whiteboard <sessionId>, whose change is `<base>..<head>` in `<repositoryPath>`."
 - call `session_activity_begin` and pass its `activityId` on every `session_edit`
 - for a project-target plan or overview, read the relevant source or the stack's combined diff; no diff is expected on the project target itself. For a change board, read the diff with git (or jj) in `repositoryPath`, at the commits `session_create` returned: `git diff <base> <head>`, or for a worktree target `git diff <base>` plus `git status` for untracked files. if it shows no changes, the target is wrong: fix it with `session_set_target` before writing. for a PR, retarget with `{kind:"pullRequest", pullRequest}`, never its branch names: those pin the branch tips, not the PR's merge base, and widen the diff
-- immediately after reading the diff (and the PR description) - put down a first pass at the what/why section.
+- immediately after reading the diff (and the PR description), write the hero as the board's first block, before any section. Only then put down a first pass at the what/why section.
 
-- whiteboard structure - each of these should be written as a top-level `section`, in this order:
+- whiteboard structure - after the hero, each of these should be written as a top-level `section`, in this order:
   - what/why: succinct description of what the change is, + why the change was made (if this context is available to you.)
   - requirements: as given by the user, in their own words, if this context is available to you. otherwise, omit. write these as short bullet points
   - design: how the solution works at the level of components, data and control flow, not functions.

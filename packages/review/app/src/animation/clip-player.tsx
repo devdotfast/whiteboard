@@ -55,21 +55,22 @@ export function useClipPlayer(
 
     // The tour and a render read a stop at rest; the controls keep playing
     // if it was.
-    if (by !== "controls" && playing) {
-      send({ type: "pause" });
-      setPlaying(false);
-    }
+    if (by !== "controls") pause();
 
     resumeRef.current = undefined;
     setMarkerKey(stop.key);
     send({ type: "seek", marker: stop.key });
   };
 
+  const pause = () => {
+    if (!playing) return;
+    send({ type: "pause" });
+    setPlaying(false);
+  };
+
   const toggle = () => {
-    if (playing) {
-      send({ type: "pause" });
-      setPlaying(false);
-    } else {
+    if (playing) pause();
+    else {
       send({ type: "play" });
       setPlaying(true);
     }
@@ -149,6 +150,7 @@ export function useClipPlayer(
     stops,
     activeIndex,
     pick,
+    pause,
     boot,
     receive,
     scenario,

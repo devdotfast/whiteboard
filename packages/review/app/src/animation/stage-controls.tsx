@@ -13,6 +13,7 @@ import {
   type ReactNode,
   useEffect,
   useRef,
+  useState,
 } from "react";
 
 import type { FrameTimer, PlayerStop } from "./stage-player";
@@ -29,14 +30,19 @@ export function ControlButton({
   children: ReactNode;
 }) {
   const tooltip = useTooltip(label, { quick: true });
+  // A button reaching the end of its path keeps the focus it has, so the
+  // keys pressed on it go on working; its handler has nowhere to go.
+  const [focused, setFocused] = useState(false);
 
   return (
     <IconButton
       ref={tooltip}
       aria-label={label}
       size="small"
-      disabled={disabled}
+      disabled={disabled && !focused}
       onClick={onClick}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
     >
       <svg
         aria-hidden="true"

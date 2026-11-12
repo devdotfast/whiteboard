@@ -166,6 +166,10 @@ export const stageMessageSchema = z.discriminatedUnion("type", [
   z.strictObject({
     type: z.literal("measured"),
     height: z.number().finite().nonnegative().max(STAGE_MAX_HEIGHT),
+    /** Where the drawing itself runs across all those frames, from its
+     * leftmost mark to its rightmost, for a hero to fit to its pane. */
+    left: z.number().finite().min(-SLOT_MAX_OFFSET).max(SLOT_MAX_OFFSET),
+    right: z.number().finite().min(-SLOT_MAX_OFFSET).max(SLOT_MAX_OFFSET),
   }),
   z.strictObject({
     type: z.literal("slots"),

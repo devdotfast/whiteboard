@@ -1,4 +1,5 @@
 import { useAgentSelection } from "@canvas/agent-selection";
+import { HeroContext } from "@canvas/animation/hero";
 import type { ApiDocumentData } from "@canvas/api-document";
 import { DocumentNode, useEditingBlock } from "@canvas/api-document";
 import { missingLabel } from "@canvas/board-link";
@@ -642,21 +643,29 @@ export function BoardEditor({
     [richData, softwareMapEnabled, regionKey],
   );
 
+  // A board that opens on an animation shows it edge to edge.
+  const first = data.snapshot.document[0];
+
+  const hero =
+    first?.type === "animation" && !first.scenarios ? (first.id ?? null) : null;
+
   return (
-    <BoardSaveStatusContext.Provider value={status}>
-      <BoardSaveRetryContext.Provider value={retry}>
-        <RichBlockContext.Provider value={rich}>
-          <div {...stylex.props(styles.editor)}>
-            <div ref={mount} />
-            {slash?.state.open && (
-              <SlashMenu state={slash.state} view={slash.view} />
-            )}
-          </div>
-          <Portals store={store} />
-          <Courier />
-        </RichBlockContext.Provider>
-      </BoardSaveRetryContext.Provider>
-    </BoardSaveStatusContext.Provider>
+    <HeroContext.Provider value={hero}>
+      <BoardSaveStatusContext.Provider value={status}>
+        <BoardSaveRetryContext.Provider value={retry}>
+          <RichBlockContext.Provider value={rich}>
+            <div {...stylex.props(styles.editor)}>
+              <div ref={mount} />
+              {slash?.state.open && (
+                <SlashMenu state={slash.state} view={slash.view} />
+              )}
+            </div>
+            <Portals store={store} />
+            <Courier />
+          </RichBlockContext.Provider>
+        </BoardSaveRetryContext.Provider>
+      </BoardSaveStatusContext.Provider>
+    </HeroContext.Provider>
   );
 }
 
