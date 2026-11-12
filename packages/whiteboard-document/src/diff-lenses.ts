@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as z from "zod";
 
 import { label } from "./blocks/definition.js";
 import { ReviewInputError } from "./input-error.js";

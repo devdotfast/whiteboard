@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as z from "zod";
 
 export const focusSchema = z.strictObject({
   description: z.string().trim().min(1).max(160),
