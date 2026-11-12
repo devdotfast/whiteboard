@@ -5,7 +5,7 @@ import {
   lensEditSchema,
   lensSchema,
 } from "@dev.fast/whiteboard-document";
-import { z } from "zod";
+import * as z from "zod";
 
 /** WebSocket subprotocol: the browser offers `[BOARD_PROTOCOL, jwt]`; the server echoes it. */
 export const BOARD_PROTOCOL = "board.v1";

@@ -63,7 +63,7 @@ import {
   readStoredDocument,
 } from "@review/stored-document-migration.js";
 import { coverageSchema } from "@review/viewed-coverage.js";
-import { z } from "zod";
+import * as z from "zod";
 
 import { ReviewActivity } from "./activity.js";
 import { AnimationRuns, animationReportSchema } from "./animation-runs.js";

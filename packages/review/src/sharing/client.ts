@@ -17,7 +17,7 @@ import {
   readBoundedStream,
 } from "@review/server/bounded-stream.js";
 import { Agent } from "undici";
-import { z } from "zod";
+import * as z from "zod";
 
 import { shareRequestBody } from "./export.js";
 import {

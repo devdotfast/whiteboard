@@ -2,7 +2,7 @@
  * Messages between register.tsx and view.tsx. They cross Claude Code's surface boundary as JSON,
  * so colours are indexes into `Frame.colors`.
  */
-import { z } from "zod";
+import * as z from "zod";
 import type { Target } from "@diffr/viewer/viewport/cell";
 import type { Hover, KeyPress } from "@diffr/viewer/viewer";
 

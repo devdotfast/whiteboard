@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as z from "zod";
 
 import { pullRequestProvider } from "./provider.js";
 import type { Snapshot } from "./store.js";

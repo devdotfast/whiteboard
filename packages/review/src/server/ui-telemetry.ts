@@ -13,7 +13,7 @@ import {
   REVIEW_APP_SESSION_ID_HEADER,
   sanitizeUiTelemetryEvent,
 } from "@review/ui-telemetry-events";
-import { z } from "zod";
+import * as z from "zod";
 
 import { ClientErrorBudget } from "./client-error-budget";
 

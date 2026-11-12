@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as z from "zod";
 
 import { ReviewInputError } from "../input-error.js";
 import { type Anchor, anchorSchema } from "../lens-selection.js";

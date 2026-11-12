@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { z } from "zod";
+import * as z from "zod";
 
 const registrySchema = z.object({
   versions: z.record(z.string(), z.object({ gitHead: z.string().optional() })),

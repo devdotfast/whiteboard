@@ -6,7 +6,7 @@ import type { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 import yauzl from "yauzl";
-import { z } from "zod";
+import * as z from "zod";
 
 const manifestSchema = z.looseObject({
   publisher: z.string(),

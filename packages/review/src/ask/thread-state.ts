@@ -1,5 +1,5 @@
 import { AgentSelectionSchema } from "@review/agent-selection.js";
-import { z } from "zod";
+import * as z from "zod";
 
 // The canvas imports this module, so it stays free of Node APIs.
 export const askAgentIds = [

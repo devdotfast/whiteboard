@@ -11,7 +11,7 @@ import {
   activityUpdateSchema,
   focusSchema,
 } from "@dev.fast/whiteboard-document";
-import { z } from "zod";
+import * as z from "zod";
 
 export const activitySchema = z.discriminatedUnion("action", [
   activityBeginSchema.extend({ action: z.literal("begin") }),

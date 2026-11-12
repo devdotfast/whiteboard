@@ -3,7 +3,7 @@
 // nothing else on the page can speak on the channel.
 
 import type { JsonValue } from "@dev.fast/json";
-import { z } from "zod";
+import * as z from "zod";
 
 /** What the stage's script reads about one frame. */
 export interface StageFrame {

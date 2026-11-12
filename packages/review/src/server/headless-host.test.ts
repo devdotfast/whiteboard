@@ -58,7 +58,7 @@ import {
 } from "@review/server-discovery.js";
 import sharp from "sharp";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { z } from "zod";
+import * as z from "zod";
 
 import { createGlobalReviewServer } from "./desktop-server.js";
 import { runHeadlessServer } from "./headless-host.js";

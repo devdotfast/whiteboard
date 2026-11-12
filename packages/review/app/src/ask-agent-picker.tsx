@@ -29,7 +29,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { z } from "zod";
+import * as z from "zod";
 
 import { canvasQueryKeys } from "./canvas-query";
 import type { ReviewSession } from "./host/review-session";

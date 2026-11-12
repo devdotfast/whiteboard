@@ -1,5 +1,5 @@
 import { isStringValue } from "@dev.fast/review-protocol";
-import { z } from "zod";
+import * as z from "zod";
 
 import { parseDataStoreSchemaEndpoint } from "./model";
 import type {

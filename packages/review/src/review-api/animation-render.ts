@@ -8,7 +8,7 @@ import {
   ReviewInputError,
   elements,
 } from "@dev.fast/whiteboard-document";
-import { z } from "zod";
+import * as z from "zod";
 
 import type { Snapshot } from "./store.js";
 

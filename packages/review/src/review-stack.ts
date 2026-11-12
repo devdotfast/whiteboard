@@ -3,7 +3,7 @@ import type {
   ReviewApiSummary,
   ReviewStackLayer,
 } from "@dev.fast/review-protocol";
-import { z } from "zod";
+import * as z from "zod";
 
 import {
   type RunGitHubApi,

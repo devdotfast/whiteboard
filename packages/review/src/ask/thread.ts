@@ -54,7 +54,7 @@ import {
   applyAskChange,
   askChoiceKinds,
 } from "@review/ask/thread-state.js";
-import { z } from "zod";
+import * as z from "zod";
 
 /** Refused without asking: changes to files, and leaving the read-only
  * mode (Claude asks to exit plan mode with its plan). */

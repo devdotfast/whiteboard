@@ -42,7 +42,8 @@ review.
   `pnpm --filter @dev.fast/review-desktop protocol:sync`. The fork's protocol
   copy is generated and gitignored.
 - Prefer named static imports from public package entry points over namespace
-  imports.
+  imports. zod is the exception: `import * as z from "zod"`, since its `z`
+  export keeps every locale in a bundle (`zod-imports/namespace` enforces it).
 
 ## Agent capability switches
 

@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as z from "zod";
 
 import { unionIntervals } from "./intervals.js";
 import { type FileLineRange, type SourcePins } from "./source.js";

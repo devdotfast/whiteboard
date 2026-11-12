@@ -2,7 +2,7 @@ import type {
   SoftwareDataStoreFieldSchema,
   SoftwareModelInput,
 } from "@review/software-map-model.js";
-import { z } from "zod";
+import * as z from "zod";
 
 // Decode the existing map authoring format at the HTTP boundary. The existing
 // defineSoftwareMap normalizer remains responsible for relationships/coverage.

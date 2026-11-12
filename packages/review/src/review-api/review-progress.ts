@@ -20,7 +20,7 @@ import {
   selectionKey,
   selectionReferences,
 } from "@dev.fast/whiteboard-document";
-import { z } from "zod";
+import * as z from "zod";
 
 import type { ComparisonCoverage } from "./comparison-coverage.js";
 import type { LocalReviewData } from "./local-data.js";

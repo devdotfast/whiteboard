@@ -12,7 +12,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 import { describe, expect, it } from "vitest";
-import { z } from "zod";
+import * as z from "zod";
 
 import { REVIEW_MCP_LAUNCH } from "./connect-prompts";
 import { findReviewPackageRoot } from "./package-paths";

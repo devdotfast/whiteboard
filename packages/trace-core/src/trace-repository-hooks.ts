@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { jsonArray, jsonString, parseJsonText } from "@dev.fast/json";
 import { gitAt } from "@dev.fast/local-vcs";
-import { z } from "zod";
+import * as z from "zod";
 
 import { writeFileAtomicAsync } from "./atomic-write";
 import {

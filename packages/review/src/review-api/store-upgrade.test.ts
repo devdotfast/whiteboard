@@ -6,7 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 
 import { sourceReferences } from "@dev.fast/whiteboard-document";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CheckoutGroups, type CheckoutProbe } from "./checkout-groups.js";
 import {
@@ -33,8 +33,16 @@ const providers = {
 
 const opened: ReviewStore[] = [];
 
+// The fixtures hold boards put in Trash when they were made, which a store
+// purges once they are 30 days old. Their clock stays a day after the
+// newest of them, so an upgrade keeps every board whenever the test runs.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-10-14T00:00:00Z") });
+});
+
 afterEach(async () => {
   await Promise.all(opened.splice(0).map((store) => store.close()));
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 

@@ -4,7 +4,7 @@
  * Defaults are omitted, not null. Lines are zero-based, columns are UTF-8 bytes,
  * and ranges are half-open.
  */
-import { z } from "zod";
+import * as z from "zod";
 
 /** A pairing always has at least one side; additions/deletions omit the other. */
 export type StructuralPairing<T> =

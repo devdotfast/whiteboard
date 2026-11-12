@@ -7,7 +7,7 @@ import {
   writableBlockTypes,
 } from "@dev.fast/whiteboard-document";
 import { findReviewPackageRoot } from "@review/package-paths.js";
-import { z } from "zod";
+import * as z from "zod";
 
 export const INSTRUCTION_TOPICS = [
   "authoring",

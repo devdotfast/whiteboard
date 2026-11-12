@@ -31,7 +31,7 @@ import {
 import { stageStyleReference } from "@review/animation-stage-kit.js";
 import { isMissingFileError } from "@review/fs-utils.js";
 import { findReviewPackageRoot } from "@review/package-paths.js";
-import { z } from "zod";
+import * as z from "zod";
 
 import {
   type AnimationReference,

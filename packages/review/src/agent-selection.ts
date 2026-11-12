@@ -2,7 +2,7 @@ import {
   ReviewApiSelectionSourceSchema,
   ReviewSelectedDiffSchema,
 } from "@dev.fast/review-protocol";
-import { z } from "zod";
+import * as z from "zod";
 
 /** The most block text an anchor keeps; a selection in a longer block is
  * not anchored. */

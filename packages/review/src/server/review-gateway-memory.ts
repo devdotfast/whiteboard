@@ -3,7 +3,7 @@ import path from "node:path";
 
 import type { ReviewApiSummary } from "@dev.fast/review-protocol";
 import { errorMessage, writePrivateJsonAtomic } from "@dev.fast/trace-core";
-import { z } from "zod";
+import * as z from "zod";
 
 export const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

@@ -4,7 +4,7 @@ import path from "node:path";
 import type { Writable } from "node:stream";
 
 import { connectReviewApi } from "@review/review-api/agent-client.js";
-import { z } from "zod";
+import * as z from "zod";
 
 const resultSchema = z.strictObject({
   shareId: z.uuid(),
