@@ -14,6 +14,7 @@ import {
   lookupReviewTraceBlame,
   lookupReviewTraceCommit,
   lookupReviewTraceSession,
+  pullReviewTraceCorpus,
   syncReviewTrace,
 } from "./review-agent-traces";
 
@@ -61,6 +62,160 @@ describe("review-agent-traces", () => {
     clearTraceEnvCache();
     vi.restoreAllMocks();
     rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it.each(["claude", "codex", "pi"])(
+    "searches raw %s traces without remote storage and refreshes edits",
+    async (harness) => {
+      const sessionId = "11111111-aaaa-bbbb-cccc-000000000001";
+
+      const paths = {
+        claude: path.join(localClaudeDir, `${sessionId}.jsonl`),
+        codex: path.join(
+          localCodexDir,
+          `rollout-2026-10-01-${sessionId}.jsonl`,
+        ),
+        pi: path.join(localPiDir, `2026-10-01_${sessionId}.jsonl`),
+      };
+
+      const records = {
+        claude: [{ type: "user", message: { content: "Local evidence" } }],
+        codex: [
+          { type: "session_meta", payload: { id: sessionId, cwd: tempDir } },
+          {
+            type: "event_msg",
+            payload: { type: "user_message", message: "Local evidence" },
+          },
+        ],
+        pi: [
+          { type: "session", id: sessionId, cwd: tempDir },
+          {
+            type: "message",
+            message: { role: "user", content: "Local evidence" },
+          },
+        ],
+      };
+
+      const raw = records[harness as keyof typeof records]
+        .map((record) => JSON.stringify(record))
+        .join("\n");
+
+      const tracePath = paths[harness as keyof typeof paths];
+      writeFileSync(tracePath, raw);
+
+      const input = {
+        repo: { owner: "acme", repo: "widgets" },
+        sessions: [{ id: sessionId }],
+        storage: null,
+      };
+
+      const result = await pullReviewTraceCorpus(input);
+      expect(result.unavailableSessions).toEqual([]);
+      expect(result.files).toBe(1);
+      expect(result.paths.every((file) => existsSync(file))).toBe(true);
+
+      const loaded = await loadReviewAgentTrace({
+        sessionId,
+        repo: input.repo,
+        storage: null,
+      });
+
+      expect(loaded?.trace.events).toContainEqual(
+        expect.objectContaining({ kind: "user", text: "Local evidence" }),
+      );
+      writeFileSync(
+        tracePath,
+        raw.replaceAll("Local evidence", "Updated evidence"),
+      );
+      await pullReviewTraceCorpus(input);
+
+      const updated = await loadReviewAgentTrace({
+        sessionId,
+        repo: input.repo,
+        storage: null,
+      });
+
+      expect(updated?.trace.events).toContainEqual(
+        expect.objectContaining({ text: "Updated evidence" }),
+      );
+      rmSync(tracePath);
+
+      const cached = await loadReviewAgentTrace({
+        sessionId,
+        repo: input.repo,
+        storage: null,
+      });
+
+      expect(cached?.trace.events).toContainEqual(
+        expect.objectContaining({ text: "Updated evidence" }),
+      );
+      expect(existsSync(path.join(mockR2Dir, "by-session"))).toBe(false);
+    },
+  );
+
+  it("pulls local subagents and reports missing traces without substituting the main trace", async () => {
+    const sessionId = "local-subagents-123";
+    const childDir = path.join(localClaudeDir, sessionId, "subagents");
+    mkdirSync(childDir, { recursive: true });
+    writeFileSync(
+      path.join(localClaudeDir, `${sessionId}.jsonl`),
+      JSON.stringify({ type: "user", message: { content: "Main evidence" } }),
+    );
+    writeFileSync(
+      path.join(childDir, "agent-child.jsonl"),
+      JSON.stringify({
+        type: "user",
+        isSidechain: true,
+        message: { content: "Child evidence" },
+      }),
+    );
+
+    const descriptor = await describeTraceSession(
+      { sessionId, commits: [] },
+      null,
+    );
+
+    expect(descriptor.subagents).toEqual(["agent-child"]);
+    expect(descriptor.source).toBeNull();
+
+    const result = await pullReviewTraceCorpus({
+      repo: { owner: "acme", repo: "widgets" },
+      sessions: [{ id: sessionId }],
+      storage: null,
+    });
+
+    expect(result.files).toBe(2);
+    expect(result.events).toBe(2);
+
+    const child = await loadReviewAgentTrace({
+      sessionId,
+      trace: "agent-child",
+      storage: null,
+    });
+
+    expect(child?.trace.events).toContainEqual(
+      expect.objectContaining({ text: "Child evidence" }),
+    );
+    expect(
+      await loadReviewAgentTrace({
+        sessionId,
+        trace: "missing",
+        storage: null,
+      }),
+    ).toBeNull();
+    expect(
+      await loadReviewAgentTrace({ sessionId: "../../bad", storage: null }),
+    ).toBeNull();
+    expect(
+      (
+        await pullReviewTraceCorpus({
+          repo: { owner: "acme", repo: "widgets" },
+          sessions: [{ id: sessionId }],
+          mainOnly: true,
+          storage: null,
+        })
+      ).files,
+    ).toBe(1);
   });
 
   it("exports OpenCode sessions and reads them back through legacy bucket storage without hosted login", async () => {
