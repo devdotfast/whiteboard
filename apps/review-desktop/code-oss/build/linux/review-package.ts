@@ -80,6 +80,11 @@ async function stageReviewPackage(codeRoot: string, destination: string) {
 	await cp(source, join(destination, share), { recursive: true, verbatimSymlinks: true });
 	await rename(join(destination, share, product.applicationName), join(destination, share, app));
 	await writeFile(join(destination, share, 'resources/app/product.json'), JSON.stringify({ ...product, applicationName: app }, null, '\t'));
+	// Electron derives the X11 WM_CLASS and Wayland app ID from desktopName, so it
+	// must name the desktop file installed below for docks to match the window.
+	const packageJsonPath = join(destination, share, 'resources/app/package.json');
+	const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf8'));
+	await writeFile(packageJsonPath, JSON.stringify({ ...packageJson, desktopName: `${name}.desktop` }, null, '\t'));
 	// The Code OSS bin/<app> command opens editors. The public command is the
 	// Review agent CLI; keep the app executable behind a distinct desktop launcher.
 	await rm(join(destination, share, 'bin'), { recursive: true, force: true });
@@ -106,7 +111,7 @@ Icon=${app}
 Type=Application
 Terminal=false
 StartupNotify=true
-StartupWMClass=${appName}
+StartupWMClass=${name}
 Categories=Development;
 Keywords=review;code;agents;
 MimeType=application/x-whiteboard;
