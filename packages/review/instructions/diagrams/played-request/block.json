@@ -1,0 +1,44 @@
+{
+  "title": "A timeout racing a slow reply",
+  "description": "The client gives up a moment before the price arrives.",
+  "timeline": {
+    "chapters": [
+      {
+        "key": "call",
+        "title": "Call",
+        "duration": 1200,
+        "caption": "The client asks for a price."
+      },
+      {
+        "key": "wait",
+        "title": "Wait",
+        "duration": 2000,
+        "caption": "Pricing takes its time.",
+        "code": ["pricing"]
+      },
+      {
+        "key": "timeout",
+        "title": "Timeout",
+        "duration": 800,
+        "caption": "The client's 3 s timeout fires.",
+        "code": ["client-call"]
+      },
+      {
+        "key": "late",
+        "title": "Late reply",
+        "duration": 1200,
+        "caption": "The price arrives after nobody is waiting."
+      }
+    ]
+  },
+  "code": {
+    "client-call": {
+      "source": "head/client/price.go#L18",
+      "label": "Client timeout"
+    },
+    "pricing": {
+      "source": "head/pricing/src/main/java/PriceHandler.java#L22-L40",
+      "label": "Pricing handler"
+    }
+  }
+}

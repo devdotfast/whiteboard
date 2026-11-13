@@ -1,3 +1,5 @@
+New `animation` and `clip` components are retired: write a `diagram` instead (`session_get_instructions({topic:"diagram"})`), which draws steps, request movements, played timelines and charts. Use these instructions only to fix or update an animation or clip a whiteboard already holds.
+
 An `animation` component draws HTML you write on the whiteboard, in a sandboxed iframe. The reader steps through its frames, or plays them. The `session_edit` schema lists its fields.
 
 For paths a reader can pick, such as a retry that succeeds or one that gives up, use `scenarios`: the whiteboard draws the picker, so do not draw your own buttons.

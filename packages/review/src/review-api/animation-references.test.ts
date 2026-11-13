@@ -11,6 +11,7 @@ import { readAnimationFolder } from "./animation-drafts.js";
 import { readAnimationReferences } from "./animation-references.js";
 import { createReviewApi } from "./http.js";
 import { openLocalReviewStore } from "./local-data.js";
+import { REVIEW_PERSON_HEADER } from "./request-origin.js";
 
 let directory: string, repository: string, reviewId: string;
 
@@ -21,10 +22,15 @@ let app: Hono;
 const git = (...args: string[]) =>
   execFileSync("git", args, { cwd: repository, encoding: "utf8" }).trim();
 
-async function post(route: string, body: JsonValue) {
+/** Posts as an agent, or as a person: agents may no longer add an
+ * animation, so the animation references go in as a person's would. */
+async function post(route: string, body: JsonValue, person = false) {
   const response = await app.request(route, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      ...(person && { [REVIEW_PERSON_HEADER]: "1" }),
+    },
     body: JSON.stringify(body),
   });
 
@@ -103,6 +109,46 @@ describe("the reference animations are what the API accepts", () => {
           Object.entries(fields.code).map(([name, range]) => [
             name,
             isJsonObject(range) ? { ...range, source: ANCHOR } : ANCHOR,
+          ]),
+        );
+
+      const result = await post(
+        "/commands",
+        {
+          operation: {
+            type: "edit",
+            reviewId,
+            edit: { type: "insert", content },
+          },
+        },
+        true,
+      );
+
+      expect({ name: reference.name, ...result }).toEqual({
+        name: reference.name,
+        status: 200,
+        body: result.body,
+      });
+    }
+  });
+
+  it("inserts every reference diagram through the API, as an agent", async () => {
+    const diagrams = await readAnimationReferences(undefined, {
+      folder: "diagrams",
+    });
+
+    expect(diagrams.map(({ name }) => name)).toContain("request-fan-out");
+
+    for (const reference of diagrams) {
+      const fields = await readAnimationFolder(reference.directory);
+      const content: JsonObject = { ...fields };
+
+      // Every link points at the test repository's order.ts.
+      if (isJsonObject(fields.code))
+        content.code = Object.fromEntries(
+          Object.entries(fields.code).map(([name, range]) => [
+            name,
+            isJsonObject(range) ? { ...range, source: ANCHOR } : range,
           ]),
         );
 

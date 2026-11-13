@@ -1,0 +1,18 @@
+{
+  "title": "Token-bucket rate limiter",
+  "description": "The gateway takes a token from the caller's bucket before it forwards a request; an empty bucket answers 429.",
+  "code": {
+    "gateway": {
+      "source": "head/gateway/limiter.go#L12-L40",
+      "label": "Limiter"
+    },
+    "take-token": {
+      "source": "head/gateway/limiter.go#L24",
+      "label": "Take a token"
+    },
+    "reject": {
+      "source": "head/gateway/limiter.go#L31",
+      "label": "Answer 429"
+    }
+  }
+}

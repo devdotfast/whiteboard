@@ -16,6 +16,14 @@ export {
 
 export { animationCode } from "./blocks/animation.js";
 
+export type {
+  DiagramBlock,
+  DiagramChapter,
+  DiagramCode,
+  DiagramFrame,
+  DiagramMove,
+} from "./blocks/diagram.js";
+
 export { label } from "./blocks/definition.js";
 
 export {

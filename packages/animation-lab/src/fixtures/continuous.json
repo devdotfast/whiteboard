@@ -1,0 +1,68 @@
+{
+  "title": "Read through a cache",
+  "description": "One read from the client's request to its response, as one motion.",
+  "stage": {
+    "width": 720,
+    "height": 320
+  },
+  "script": "import { createTimeline } from \"animejs\";\n\n// Four services in a row, drawn as C4 nodes; a token carries the request.\nconst services = [\n  { id: \"client\", kind: \"person\", label: \"Client\", x: 20 },\n  { id: \"api\", kind: \"container\", label: \"API\", tag: \"Container \u00b7 Node.js\", x: 195 },\n  { id: \"cache\", kind: \"database\", label: \"Cache\", tag: \"Database \u00b7 Redis\", x: 370 },\n  { id: \"db\", kind: \"database\", label: \"Orders\", tag: \"Database \u00b7 Postgres\", x: 545 },\n];\n\ndocument.head.insertAdjacentHTML(\"beforeend\", `<style>\n  .token { position: absolute; top: 96px; left: 0; width: 12px; height: 12px; border-radius: 50%; background: light-dark(#2b55e6, #5b7cff); }\n  .token.response { background: light-dark(#1b9a57, #4ed990); }\n  .wire { position: absolute; top: 160px; left: 95px; width: 525px; border-top: 1.5px dashed light-dark(#c8ccd3, #39404d); }\n</style>`);\n\ndocument.body.insertAdjacentHTML(\"beforeend\", '<div class=\"wire\"></div>');\n\nconst nodes = new Map(\n  services.map(({ id, ...service }) => [id, wb.node({ ...service, y: 128, width: 150, height: 64 })]),\n);\n\nconst token = document.createElement(\"div\");\ntoken.className = \"token\";\ndocument.body.append(token);\n\nconst centre = (id) => services.find((service) => service.id === id).x + 75 - 6;\n\n// Where the request is lights up; services it has not reached are dimmed.\nconst show = (at, involved) => {\n  for (const [id, node] of nodes)\n    node.dataset.state = id === at ? \"active\" : involved.includes(id) ? \"default\" : \"dimmed\";\n};\n\n// One paused anime.js timeline for the token's whole journey. Each chapter\n// spends its first 70% travelling to where its data says, then rests.\nconst chapters = wb.chapters;\nconst motion = createTimeline({ autoplay: false, defaults: { ease: \"inOutQuad\" } });\nmotion.set(token, { translateX: centre(chapters[0].data.at) }, 0);\n\nlet start = 0;\nfor (const chapter of chapters) {\n  motion.add(token, { translateX: centre(chapter.data.at), duration: chapter.duration * 0.7 }, start);\n  start += chapter.duration;\n}\n\n// Draw exactly the moment the player asks for; time can jump either way.\nwb.onTime((time, { chapter, chapterIndex, chapterTime }) => {\n  motion.seek(time);\n\n  // A service lights up once the token arrives, not as the chapter starts.\n  const arrived = chapterTime >= chapter.duration * 0.7 || chapterIndex === 0;\n  const at = arrived ? chapter.data.at : chapters[chapterIndex - 1].data.at;\n\n  show(at, chapter.data.involved);\n  token.classList.toggle(\"response\", chapter.data.response);\n});\n",
+  "timeline": {
+    "chapters": [
+      {
+        "id": "request",
+        "label": "Request",
+        "caption": "The client sends a read to the API.",
+        "duration": 1200,
+        "data": {
+          "at": "client",
+          "involved": ["client"],
+          "response": false
+        }
+      },
+      {
+        "id": "api",
+        "label": "Check cache",
+        "caption": "The API checks the cache first.",
+        "duration": 1200,
+        "data": {
+          "at": "api",
+          "involved": ["client", "api"],
+          "response": false
+        }
+      },
+      {
+        "id": "miss",
+        "label": "Cache miss",
+        "caption": "The cache misses, so the read goes on to the database.",
+        "duration": 1200,
+        "data": {
+          "at": "cache",
+          "involved": ["client", "api", "cache"],
+          "response": false
+        }
+      },
+      {
+        "id": "db",
+        "label": "Database",
+        "caption": "The database returns the row, and the cache keeps a copy.",
+        "duration": 1200,
+        "data": {
+          "at": "db",
+          "involved": ["client", "api", "cache", "db"],
+          "response": true
+        }
+      },
+      {
+        "id": "response",
+        "label": "Response",
+        "caption": "The API answers the client.",
+        "duration": 1200,
+        "data": {
+          "at": "client",
+          "involved": ["client", "api", "cache", "db"],
+          "response": true
+        }
+      }
+    ]
+  }
+}

@@ -4,12 +4,14 @@
 import { fontSize, leading, space, tracking } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import { IconButton } from "@canvas/ui/button";
+import type { IconProps } from "@canvas/ui/icons";
 import { textStyles } from "@canvas/ui/text";
 import { useTooltip } from "@canvas/ui/tooltip";
 import * as stylex from "@stylexjs/stylex";
 import {
   type CSSProperties,
   type KeyboardEvent,
+  type ReactElement,
   type ReactNode,
   useEffect,
   useRef,
@@ -21,12 +23,13 @@ export function ControlButton({
   label,
   disabled,
   onClick,
-  children,
+  icon: Glyph,
 }: {
   label: string;
   disabled?: boolean;
   onClick(): void;
-  children: ReactNode;
+  /** A kit icon, drawn at the player's size. */
+  icon: (props: IconProps) => ReactElement;
 }) {
   const tooltip = useTooltip(label, { quick: true });
 
@@ -38,35 +41,33 @@ export function ControlButton({
       disabled={disabled}
       onClick={onClick}
     >
-      <svg
-        aria-hidden="true"
-        focusable="false"
-        viewBox="0 0 24 24"
-        {...stylex.props(styles.icon)}
-      >
-        {children}
-      </svg>
+      <Glyph xstyle={playerIconStyles.control} />
     </IconButton>
   );
 }
 
-export const playIcon = <path d="M8.5 6.5v11l9-5.5z" />;
-
-export const pauseIcon = <path d="M9 6.5v11M15 6.5v11" />;
-
 /** The title and caption of the stop showing, read out as it changes. Every
  * stop's caption shares one cell, with only the current one visible, so the
  * row keeps the height of the longest and never moves as the reader steps.
- * A caption stops at three lines. */
+ * A caption stops at three lines. In the `reading` look, under a track that
+ * names every stop, the caption reads as body text and the title shows only
+ * where the track drops its names, or when there is no caption. */
 export function StopCaption({
   stops,
   activeIndex,
+  look = "footer",
 }: {
   stops: readonly PlayerStop[];
   activeIndex: number;
+  look?: "footer" | "reading";
 }) {
+  const reading = look === "reading";
+
   return (
-    <div {...stylex.props(styles.caption)} aria-live="polite">
+    <div
+      {...stylex.props(styles.caption, reading && styles.captionReading)}
+      aria-live="polite"
+    >
       {stops.map((stop, position) => {
         const current = position === activeIndex;
 
@@ -79,12 +80,17 @@ export function StopCaption({
               !current && styles.captionHidden,
             )}
           >
-            <strong data-review-copy-prose={current || undefined}>
+            <strong
+              data-review-copy-prose={current || undefined}
+              {...stylex.props(
+                reading && !!stop.caption && styles.titleWhenNarrow,
+              )}
+            >
               {stop.title}
             </strong>
             {stop.caption && (
               <span data-review-copy-prose={current || undefined}>
-                {" "}
+                {reading ? null : " "}
                 {stop.caption}
               </span>
             )}
@@ -189,16 +195,21 @@ const draw = stylex.keyframes({
   to: { width: "100%" },
 });
 
-const styles = stylex.create({
-  icon: {
+/** The players' icons: 16px in a control, 12px beside a label. */
+export const playerIconStyles = stylex.create({
+  control: {
     width: "16px",
     height: "16px",
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 1.6,
-    strokeLinecap: "round",
-    strokeLinejoin: "round",
+    strokeWidth: "1.6px",
   },
+  inline: {
+    width: "12px",
+    height: "12px",
+    strokeWidth: "2px",
+  },
+});
+
+const styles = stylex.create({
   caption: {
     display: "grid",
     flex: "1 1 auto",
@@ -208,8 +219,21 @@ const styles = stylex.create({
     color: tokens.inkMuted,
     lineHeight: leading.px18,
   },
+  captionReading: {
+    marginLeft: 0,
+    paddingBlock: 0,
+    color: tokens.ink,
+    fontSize: fontSize.title,
+    lineHeight: leading.px22,
+  },
   captionText: {
     gridArea: "1 / 1",
+  },
+  // Its own line, and only on a narrow screen.
+  titleWhenNarrow: {
+    display: { default: "none", [stylex.env.narrow]: "block" },
+    fontSize: fontSize.body,
+    lineHeight: leading.px16,
   },
   captionHidden: {
     visibility: "hidden",

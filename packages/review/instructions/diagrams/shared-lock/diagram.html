@@ -1,0 +1,46 @@
+<style>
+  .page {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+  }
+  .lock {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 8px 16px;
+    width: 180px;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 12px 16px;
+    border: 1px solid var(--wb-line);
+    border-radius: 8px;
+    color: var(--wb-ink);
+    font-size: 13px;
+    line-height: 20px;
+  }
+  .lock dt {
+    color: var(--wb-muted);
+  }
+  .lock dd {
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .lock .refused {
+    grid-column: 1 / -1;
+    color: var(--wb-removed);
+  }
+</style>
+<div class="page">
+  <div data-wb-drawing></div>
+  <dl class="lock">
+    <dt>Holder</dt>
+    <dd data-lock="holder"></dd>
+    <dt>Lease</dt>
+    <dd data-lock="lease"></dd>
+    <dt>Token</dt>
+    <dd data-lock="token"></dd>
+    <dt>Accepted</dt>
+    <dd data-lock="highest"></dd>
+    <dd class="refused" data-wb-only="refused">Token 33 is older than 34: refused.</dd>
+  </dl>
+</div>

@@ -1,0 +1,9 @@
+{
+  "title": "Node kinds",
+  "description": "Every kind wb.node draws, and the three states they share.",
+  "stage": {
+    "width": 700,
+    "height": 380
+  },
+  "script": "// Every node kind, then the three states, drawn with wb.node.\nconst column = (i) => 20 + i * 170;\nconst size = { width: 150, height: 64 };\n\nconst kinds = [\n  [\"person\", \"Reader\"],\n  [\"system\", \"Orders\"],\n  [\"container\", \"API\", \"Container \u00b7 Node.js\"],\n  [\"component\", \"Read path\"],\n  [\"database\", \"Postgres\"],\n  [\"queue\", \"Order events\", \"Queue \u00b7 Kafka\"],\n  [\"external\", \"Stripe\"],\n];\n\nkinds.forEach(([kind, label, tag], i) =>\n  wb.node({ kind, label, tag, x: column(i % 4), y: i < 4 ? 36 : 152, ...size }),\n);\n\nconst states = [\n  [\"container\", \"API\", \"default\"],\n  [\"container\", \"API\", \"active\"],\n  [\"container\", \"API\", \"dimmed\"],\n  [\"database\", \"Postgres\", \"active\"],\n];\n\nstates.forEach(([kind, label, state], i) =>\n  wb.node({ kind, label, tag: state, state, x: column(i), y: 284, ...size }),\n);\n"
+}

@@ -1,0 +1,22 @@
+{
+  "title": "An event fanned out to its subscribers",
+  "description": "The order service publishes one event; the broker delivers it to three subscribers and waits for each ack, retrying the one that times out.",
+  "code": {
+    "publish": {
+      "source": "head/orders/events.go#L18-L30",
+      "label": "Publish the event"
+    },
+    "deliver": {
+      "source": "head/broker/deliver.go#L40-L72",
+      "label": "Deliver to a subscriber"
+    },
+    "retry": {
+      "source": "head/broker/deliver.go#L88",
+      "label": "Redeliver after a timeout"
+    },
+    "ack": {
+      "source": "head/broker/ack.go#L12-L25",
+      "label": "Record an ack"
+    }
+  }
+}

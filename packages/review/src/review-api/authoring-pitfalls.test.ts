@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { isJsonObject } from "@dev.fast/json";
 import { type JsonValue, parseJsonText } from "@dev.fast/review-protocol";
 import {
   type Pins,
@@ -24,6 +25,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createReviewApi } from "./http.js";
 import { openLocalReviewStore } from "./local-data.js";
+import { REVIEW_PERSON_HEADER } from "./request-origin.js";
+import { RETIRED_BLOCK_TYPES } from "./retired-blocks.js";
 
 let directory: string, repository: string, pins: Pins, reviewId: string;
 
@@ -46,25 +49,41 @@ interface Reply {
   body: { error?: string; targetId?: string; reviewId?: string };
 }
 
-/** Post a command the way `whiteboard mcp` does and return status and body. */
-async function post(route: string, body: JsonValue): Promise<Reply> {
+/** Post a command the way `whiteboard mcp` does and return status and body.
+ * `person` posts it as Desktop does for a person. */
+async function post(
+  route: string,
+  body: JsonValue,
+  person = false,
+): Promise<Reply> {
   const response = await app.request(route, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      ...(person && { [REVIEW_PERSON_HEADER]: "1" }),
+    },
     body: JSON.stringify(body),
   });
 
   return { status: response.status, body: await response.json() };
 }
 
+// Agents may no longer add the kinds a diagram replaced, but their rules
+// still guard what a person writes, so those inserts come from a person.
+const retired = new Set<string>(RETIRED_BLOCK_TYPES);
+
 const insert = (content: JsonValue) =>
-  post("/commands", {
-    operation: {
-      type: "edit",
-      reviewId,
-      edit: { type: "insert", content },
+  post(
+    "/commands",
+    {
+      operation: {
+        type: "edit",
+        reviewId,
+        edit: { type: "insert", content },
+      },
     },
-  });
+    isJsonObject(content) && retired.has(String(content.type)),
+  );
 
 /** Every rejection must leave the stored document byte-identical. */
 async function expectRejected(

@@ -2,21 +2,22 @@
 // its markers. The stage owns the playhead and reports it; this follows.
 
 import type { BlockProps } from "@canvas/blocks";
+import { PauseIcon, PlayIcon } from "@canvas/ui/icons";
 import { ProgressLine } from "@canvas/ui/progress-line";
 import { type KeyboardEvent, useMemo, useRef, useState } from "react";
 
-import {
-  ControlButton,
-  StopCaption,
-  pauseIcon,
-  playIcon,
-} from "./stage-controls";
+import { ControlButton, StopCaption } from "./stage-controls";
 import type { PickedBy, StagePlayer, StageSend } from "./stage-player";
 import type { PlacedMarker, StageMessage } from "./stage-protocol";
+import { TimelineControls, stepFrame } from "./timeline-controls";
 
+/** A clip's one timeline, or a diagram's (`track`): the diagram's stage can
+ * move its playhead to any time, so it gets a track the reader drags, with
+ * its chapters along it, in place of the strip of markers. */
 export function useClipPlayer(
-  node: BlockProps<"clip">["node"],
+  node: Pick<BlockProps<"clip">["node"], "markers" | "scenarios">,
   send: StageSend,
+  { track = false }: { track?: boolean } = {},
 ): StagePlayer {
   const markers = node.markers;
   // What the stage last reported: its markers in time order, its length, the
@@ -135,7 +136,29 @@ export function useClipPlayer(
     };
   };
 
+  const scrub = (time: number) => {
+    resumeRef.current = undefined;
+    send({ type: "scrub", at: time });
+  };
+
   const jump = (event: KeyboardEvent) => {
+    if (track) {
+      const starts = (placed ?? []).map((item) => item.at);
+
+      const next = {
+        ArrowLeft: stepFrame(starts, at, duration, -1),
+        ArrowRight: stepFrame(starts, at, duration, 1),
+        Home: 0,
+        End: duration,
+      }[event.key];
+
+      if (next === undefined) return false;
+      event.preventDefault();
+      scrub(Math.min(Math.max(next, 0), duration));
+
+      return true;
+    }
+
     if (event.key === "ArrowRight") pick(activeIndex + 1, "controls");
     else if (event.key === "ArrowLeft") pick(activeIndex - 1, "controls");
     else return false;
@@ -145,7 +168,7 @@ export function useClipPlayer(
     return true;
   };
 
-  return {
+  const player: StagePlayer = {
     stops,
     activeIndex,
     pick,
@@ -188,11 +211,33 @@ export function useClipPlayer(
         <ControlButton
           label={playing ? "Pause" : ended ? "Replay" : "Play"}
           onClick={toggle}
-        >
-          {playing ? pauseIcon : playIcon}
-        </ControlButton>
+          icon={playing ? PauseIcon : PlayIcon}
+        />
         <StopCaption stops={stops} activeIndex={activeIndex} />
       </>
     ),
+  };
+
+  if (!track) return player;
+
+  return {
+    ...player,
+    strip: null,
+    afterStage: (
+      <TimelineControls
+        chapters={stops.map((stop) => ({
+          ...stop,
+          at: placed?.find(({ key }) => key === stop.key)?.at ?? 0,
+        }))}
+        duration={duration}
+        at={at}
+        playing={playing}
+        activeIndex={activeIndex}
+        onToggle={toggle}
+        onScrub={scrub}
+        onPick={(position) => pick(position, "controls")}
+      />
+    ),
+    controls: null,
   };
 }

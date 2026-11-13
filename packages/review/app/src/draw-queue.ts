@@ -120,7 +120,11 @@ export function stepsFor(cursor: AuthoringCursor): DrawStep[] {
 
       // An animation's or clip's stage paints its own first frame; painted()
       // ends it.
-      if (edit.kind === "animation" || edit.kind === "clip")
+      if (
+        edit.kind === "animation" ||
+        edit.kind === "clip" ||
+        edit.kind === "diagram"
+      )
         return [{ phase: "painting", ms: PAINT_CAP }];
 
       return [{ phase: "landing", ms: 680 }];

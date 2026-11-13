@@ -1,0 +1,63 @@
+[
+  {
+    "key": "publish",
+    "title": "Orders publishes the event",
+    "label": "PUBLISH",
+    "caption": "The order service publishes “order placed” to the broker's orders topic.",
+    "moves": [
+      { "from": "orders", "to": "broker", "edge": "publish", "label": "placed" }
+    ],
+    "data": { "billing": "waiting", "email": "waiting", "audit": "waiting" }
+  },
+  {
+    "key": "deliver",
+    "title": "The broker delivers it",
+    "label": "DELIVER",
+    "caption": "The broker delivers the event to every subscriber at once.",
+    "moves": [
+      { "from": "broker", "to": "billing", "edge": "deliver-billing" },
+      { "from": "broker", "to": "email", "edge": "deliver-email" },
+      { "from": "broker", "to": "audit", "edge": "deliver-audit" }
+    ],
+    "data": {
+      "billing": "delivered",
+      "email": "delivered",
+      "audit": "delivered"
+    }
+  },
+  {
+    "key": "acked",
+    "title": "Every subscriber acks",
+    "label": "ACKED",
+    "caption": "Each subscriber acks, and the broker drops the event from its topic.",
+    "moves": [
+      { "from": "billing", "to": "broker", "edge": "ack-billing" },
+      { "from": "email", "to": "broker", "edge": "ack-email" },
+      { "from": "audit", "to": "broker", "edge": "ack-audit" }
+    ],
+    "data": { "billing": "acked", "email": "acked", "audit": "acked" }
+  },
+  {
+    "key": "timeout",
+    "title": "Email times out",
+    "label": "TIMEOUT",
+    "caption": "Billing and the audit log ack, but email never answers within 30 seconds.",
+    "moves": [
+      { "from": "billing", "to": "broker", "edge": "ack-billing" },
+      { "from": "audit", "to": "broker", "edge": "ack-audit" },
+      { "from": "email", "to": "broker", "edge": "ack-email", "lost": true }
+    ],
+    "data": { "billing": "acked", "email": "timed out", "audit": "acked" }
+  },
+  {
+    "key": "retry",
+    "title": "The broker retries email",
+    "label": "RETRY",
+    "caption": "The broker delivers the event to email again, and this time email acks.",
+    "moves": [
+      { "from": "broker", "to": "email", "edge": "retry-email" },
+      { "from": "email", "to": "broker", "edge": "ack-email", "delay": 700 }
+    ],
+    "data": { "billing": "acked", "email": "acked on retry", "audit": "acked" }
+  }
+]

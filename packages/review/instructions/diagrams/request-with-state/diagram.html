@@ -1,0 +1,46 @@
+<style>
+  .bucket {
+    margin: 24px 0 0;
+    box-sizing: border-box;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 8px 24px;
+    padding: 12px 16px;
+    border: 1px solid var(--wb-line);
+    border-radius: 8px;
+    color: var(--wb-ink);
+    font-size: 14px;
+    line-height: 20px;
+  }
+  .bucket dt {
+    color: var(--wb-muted);
+  }
+  .bucket dd {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin: 0;
+  }
+  .bucket [data-pip] {
+    width: 12px;
+    height: 12px;
+    border: 1px solid var(--wb-accent);
+    border-radius: 50%;
+  }
+  .bucket [data-pip][data-full] {
+    background: var(--wb-accent);
+  }
+</style>
+<div data-wb-drawing></div>
+<dl class="bucket">
+  <dt>Tokens left</dt>
+  <dd>
+    <span data-pip></span><span data-pip></span><span data-pip></span
+    ><span data-pip></span><span data-pip></span>
+    <span data-tokens></span>
+  </dd>
+  <dt>Decision</dt>
+  <dd data-decision></dd>
+  <dt data-wb-only="rejected">Retry-After</dt>
+  <dd data-wb-only="rejected">1 second, when the next token arrives</dd>
+</dl>

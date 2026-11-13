@@ -1,0 +1,47 @@
+[
+  {
+    "key": "overview",
+    "title": "Two weeks",
+    "label": "TWO WEEKS",
+    "caption": "Checkout latency over two weeks: p50 and p95 by day.",
+    "data": {
+      "p95": "352 ms",
+      "slo": "within the 400 ms SLO",
+      "errors": "0.2%"
+    }
+  },
+  {
+    "key": "regression",
+    "title": "Regression",
+    "label": "REGRESSION",
+    "caption": "Deploy #482 doubles p95 and lifts p50 by half, for four days.",
+    "data": {
+      "p95": "744 ms",
+      "slo": "344 ms over the 400 ms SLO",
+      "errors": "1.9%"
+    }
+  },
+  {
+    "key": "cause",
+    "title": "Cause",
+    "label": "CAUSE",
+    "caption": "Almost all of it is one endpoint: tax calculation.",
+    "code": ["latency-query"],
+    "data": {
+      "p95": "590 ms on /checkout/tax",
+      "slo": "190 ms over on that endpoint alone",
+      "errors": "1.9%"
+    }
+  },
+  {
+    "key": "fix",
+    "title": "Fix",
+    "label": "FIX",
+    "caption": "Reverting the deploy brings both back to where they were.",
+    "data": {
+      "p95": "349 ms",
+      "slo": "within the 400 ms SLO",
+      "errors": "0.2%"
+    }
+  }
+]

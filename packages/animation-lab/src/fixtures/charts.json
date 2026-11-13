@@ -1,0 +1,38 @@
+{
+  "title": "Checkout latency",
+  "description": "A latency regression after a deploy, found and fixed. Hover a chart for exact values.",
+  "stage": {
+    "width": 812,
+    "height": 560
+  },
+  "script": "// Checkout latency around a bad deploy: a line chart of two weeks of p50\n// and p95, and a bar chart of p95 by endpoint. Each step re-draws both to\n// point at what it is about.\nconst day = (n) => new Date(Date.UTC(2026, 9, 19 + n));\nconst DEPLOY = day(7);\nconst REVERT = day(11);\n\n// Daily latency in ms. The deploy slows the tax call; the revert undoes it.\nconst p50 = [118, 121, 117, 123, 120, 119, 122, 171, 176, 182, 174, 124, 119, 121];\nconst p95 = [342, 351, 338, 356, 347, 344, 352, 698, 731, 744, 712, 361, 346, 349];\n\n// One row per day too, so a tip can show both percentiles at once.\nconst days = p50.map((value, n) => ({ day: day(n), p50: value, p95: p95[n] }));\nconst date = (d) => d.toLocaleDateString(\"en\", { month: \"short\", day: \"numeric\", timeZone: \"UTC\" });\n\nconst latency = p50.flatMap((value, n) => [\n  { day: day(n), percentile: \"p50\", ms: value },\n  { day: day(n), percentile: \"p95\", ms: p95[n] },\n]);\n\n// p95 by endpoint on the worst day, before and after the deploy.\nconst endpoints = [\n  { endpoint: \"/checkout/tax\", before: 210, after: 590 },\n  { endpoint: \"/checkout/cart\", before: 160, after: 168 },\n  { endpoint: \"/checkout/pay\", before: 240, after: 246 },\n  { endpoint: \"/checkout/ship\", before: 130, after: 134 },\n];\n\nconst at = (frame) => frame?.id ?? \"overview\";\n\nwb.chart({\n  id: \"latency\",\n  label: \"Checkout latency, p50 and p95\",\n  code: \"latency-query\",\n  x: 0,\n  y: 0,\n  width: 812,\n  height: 300,\n  plot: ({ Plot, colors, frame }) => {\n    const step = at(frame);\n    const marks = [];\n\n    // The regression window, as a faint wash behind the lines.\n    if (step === \"regression\" || step === \"cause\")\n      marks.push(Plot.rectX([{ from: DEPLOY, to: REVERT }], { x1: \"from\", x2: \"to\", fill: colors.accent, fillOpacity: 0.08 }));\n\n    marks.push(\n      Plot.ruleY([0], { stroke: colors.line }),\n      // Straight segments: there is one value a day and nothing between.\n      Plot.lineY(latency, { x: \"day\", y: \"ms\", stroke: \"percentile\", strokeWidth: 2 }),\n      Plot.dot(latency, Plot.selectLast({ x: \"day\", y: \"ms\", fill: \"percentile\", r: 4, stroke: colors.surface, strokeWidth: 2 })),\n      // Direct labels at the line ends, in text colour, beside their dot.\n      Plot.text(latency, Plot.selectLast({ x: \"day\", y: \"ms\", z: \"percentile\", text: \"percentile\", dx: 10, textAnchor: \"start\", fill: colors.ink, fontWeight: 600 })),\n      // Hover: a hairline at the nearest day and a tip with both values.\n      Plot.ruleX(days, Plot.pointerX({ x: \"day\", stroke: colors.faint })),\n      Plot.tip(days, Plot.pointerX({ x: \"day\", y: \"p95\", title: (d) => `${date(d.day)}\\np95  ${d.p95} ms\\np50  ${d.p50} ms` })),\n    );\n\n    if (step !== \"overview\")\n      marks.push(\n        Plot.ruleX([DEPLOY], { stroke: colors.ink, strokeDasharray: \"3 3\" }),\n        Plot.text([DEPLOY], { x: (d) => d, frameAnchor: \"top\", text: () => \"deploy #482\", dx: 6, textAnchor: \"start\", fill: colors.ink, fontWeight: 600 }),\n      );\n\n    if (step === \"fix\")\n      marks.push(\n        Plot.ruleX([REVERT], { stroke: colors.ink, strokeDasharray: \"3 3\" }),\n        Plot.text([REVERT], { x: (d) => d, frameAnchor: \"top\", text: () => \"revert\", dx: 6, textAnchor: \"start\", fill: colors.ink, fontWeight: 600 }),\n      );\n\n    return {\n      marginTop: 28,\n      marginRight: 48,\n      marginLeft: 48,\n      x: { type: \"utc\", label: null, tickFormat: date },\n      y: { grid: true, label: \"ms\", domain: [0, 800] },\n      color: { legend: true, domain: [\"p50\", \"p95\"] },\n      marks,\n    };\n  },\n});\n\nwb.chart({\n  id: \"endpoints\",\n  label: \"p95 by endpoint, before and after the deploy\",\n  code: \"latency-query\",\n  x: 0,\n  y: 340,\n  width: 812,\n  height: 200,\n  plot: ({ Plot, colors, frame }) => {\n    const step = at(frame);\n    // After the revert each endpoint is back to its value before the deploy.\n    const shown = step === \"fix\" ? \"before\" : \"after\";\n    // On the cause step the tax call keeps its colour and the rest recede.\n    const fill = (d) =>\n      step === \"cause\" && d.endpoint !== \"/checkout/tax\" ? colors.line : colors.series[0];\n\n    return {\n      marginLeft: 120,\n      marginRight: 56,\n      x: { grid: true, label: shown === \"after\" ? \"p95 after the deploy (ms)\" : \"p95 after the revert (ms)\", labelAnchor: \"left\", domain: [0, 650] },\n      y: { label: null, domain: endpoints.map((d) => d.endpoint), padding: 0.45 },\n      marks: [\n        Plot.ruleX([0], { stroke: colors.line }),\n        Plot.barX(endpoints, { x: shown, y: \"endpoint\", fill, rx2y1: 4, rx2y2: 4, tip: { format: { x: (v) => `${v} ms`, fill: false } } }),\n        // Value at each bar's tip, in text colour.\n        Plot.text(endpoints, { x: shown, y: \"endpoint\", text: (d) => `${d[shown]} ms`, dx: 8, textAnchor: \"start\", fill: colors.muted }),\n      ],\n    };\n  },\n});\n",
+  "frames": [
+    {
+      "id": "overview",
+      "label": "Two weeks",
+      "caption": "Checkout latency over two weeks: p50 and p95 by day."
+    },
+    {
+      "id": "regression",
+      "label": "Regression",
+      "caption": "Deploy #482 doubles p95 and lifts p50 by half, for four days."
+    },
+    {
+      "id": "cause",
+      "label": "Cause",
+      "caption": "Almost all of it is one endpoint: tax calculation."
+    },
+    {
+      "id": "fix",
+      "label": "Fix",
+      "caption": "Reverting the deploy brings both back to where they were."
+    }
+  ],
+  "code": {
+    "latency-query": {
+      "anchor": "head/services/metrics/checkout_latency.sql#L2-L4",
+      "evidence": "percentile_cont(0.95)",
+      "title": "The query behind both charts"
+    }
+  }
+}

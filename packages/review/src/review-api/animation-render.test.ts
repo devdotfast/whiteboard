@@ -41,6 +41,32 @@ const clip = {
   ],
 };
 
+const SCRIPT = 'wb.node({ id: "api", kind: "container", label: "API" });';
+
+const still = { type: "diagram", title: "Still", script: SCRIPT };
+
+const played = {
+  type: "diagram",
+  title: "Played",
+  script: SCRIPT,
+  timeline: {
+    chapters: [
+      { key: "call", title: "Call", duration: 500 },
+      { key: "reply", title: "Reply", duration: 500 },
+    ],
+  },
+};
+
+const stepped = {
+  type: "diagram",
+  title: "Stepped",
+  script: SCRIPT,
+  frames: [
+    { key: "ask", title: "Ask" },
+    { key: "answer", title: "Answer" },
+  ],
+};
+
 function openStore() {
   return new ReviewStore(":memory:", {
     validatePins: async () => {},
@@ -69,6 +95,9 @@ async function board(store: ReviewStore) {
     animation,
     clip,
     { type: "markdown", markdown: "x" },
+    still,
+    played,
+    stepped,
   ]) {
     const result = await store.execute({
       operation: { type: "edit", reviewId, edit: { type: "insert", content } },
@@ -77,9 +106,18 @@ async function board(store: ReviewStore) {
     ids.push(result.targetId!);
   }
 
-  const [animationId, clipId, markdownId] = ids as [string, string, string];
+  const [animationId, clipId, markdownId, stillId, playedId, steppedId] =
+    ids as [string, string, string, string, string, string];
 
-  return { reviewId, animationId, clipId, markdownId };
+  return {
+    reviewId,
+    animationId,
+    clipId,
+    markdownId,
+    stillId,
+    playedId,
+    steppedId,
+  };
 }
 
 describe("renderTarget", () => {
@@ -112,11 +150,42 @@ describe("renderTarget", () => {
         "Its markers: sent, stored.",
       );
       expect(() => renderTarget(snapshot, markdownId, undefined)).toThrow(
-        "is a markdown; only an animation or a clip renders a frame.",
+        "is a markdown; only an animation, a clip or a diagram renders a frame.",
       );
       expect(() => renderTarget(snapshot, "missing", undefined)).toThrow(
         "Target not found",
       );
+    } finally {
+      store.close();
+    }
+  });
+
+  it("takes a diagram whole, at a chapter, or at a frame", async () => {
+    const store = openStore();
+
+    try {
+      const { reviewId, stillId, playedId, steppedId } = await board(store);
+      const snapshot = store.read(reviewId);
+
+      expect(renderTarget(snapshot, stillId, undefined)).toEqual({
+        type: "diagram",
+        key: "diagram",
+      });
+      expect(renderTarget(snapshot, playedId, undefined)).toEqual({
+        type: "diagram",
+        key: "call",
+      });
+      expect(renderTarget(snapshot, playedId, "reply")).toEqual({
+        type: "diagram",
+        key: "reply",
+      });
+      expect(() => renderTarget(snapshot, playedId, "ask")).toThrow(
+        "Its chapters: call, reply.",
+      );
+      expect(renderTarget(snapshot, steppedId, "answer")).toEqual({
+        type: "diagram",
+        key: "answer",
+      });
     } finally {
       store.close();
     }
@@ -192,6 +261,62 @@ describe("GET /:id/render", () => {
 
       const noTarget = await app.request(`/${reviewId}/render`);
       expect(noTarget.status).toBe(400);
+    } finally {
+      store.close();
+    }
+  });
+
+  it("renders every frame of every scenario in turn for frame all", async () => {
+    const store = openStore();
+    const requests: RenderRequest[] = [];
+
+    const app = createReviewApi(
+      store,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      () => true,
+      async (request) => {
+        requests.push(request);
+
+        return {
+          frame: { key: request.frame, title: "", position: 0, count: 1 },
+          clipped: false,
+          error: null,
+          png: PNG,
+        };
+      },
+    );
+
+    try {
+      const { reviewId, animationId, clipId } = await board(store);
+
+      const all = await app.request(
+        `/${reviewId}/render?targetId=${animationId}&frame=all`,
+      );
+
+      // Each scenario's frames in its order, a1 once in each; no frame is
+      // left out of every scenario here.
+      expect(all.status).toBe(200);
+      expect(requests.map(({ frame }) => frame)).toEqual([
+        "succeeds:a1",
+        "succeeds:ok",
+        "gives-up:a1",
+        "gives-up:a2",
+        "gives-up:fail",
+      ]);
+      expect(((await all.json()) as { frames: unknown[] }).frames).toHaveLength(
+        5,
+      );
+
+      requests.length = 0;
+      await app.request(`/${reviewId}/render?targetId=${clipId}&frame=all`);
+      expect(requests.map(({ frame }) => frame)).toEqual(["sent", "stored"]);
     } finally {
       store.close();
     }

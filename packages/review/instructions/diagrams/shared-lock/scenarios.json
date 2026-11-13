@@ -1,0 +1,12 @@
+[
+  {
+    "key": "holds",
+    "label": "Holds the lock",
+    "frames": ["acquire", "granted", "write"]
+  },
+  {
+    "key": "pauses",
+    "label": "Pauses past its lease",
+    "frames": ["acquire", "granted", "pause", "b-granted", "b-write", "refused"]
+  }
+]

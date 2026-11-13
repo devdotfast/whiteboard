@@ -1,0 +1,12 @@
+[
+  {
+    "key": "allowed",
+    "label": "Allowed",
+    "frames": ["ask", "take", "forward"]
+  },
+  {
+    "key": "limited",
+    "label": "Rate limited",
+    "frames": ["ask", "empty", "rejected"]
+  }
+]

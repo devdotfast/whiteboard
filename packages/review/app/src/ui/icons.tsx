@@ -101,6 +101,48 @@ export function ArrowRightIcon({ xstyle }: IconProps = {}): ReactElement {
   );
 }
 
+export function ChevronLeftIcon({ xstyle }: IconProps = {}): ReactElement {
+  return (
+    <Icon xstyle={xstyle}>
+      <path d="M14.5 6.5 9 12l5.5 5.5" />
+    </Icon>
+  );
+}
+
+export function ChevronRightIcon({ xstyle }: IconProps = {}): ReactElement {
+  return (
+    <Icon xstyle={xstyle}>
+      <path d="M9.5 6.5 15 12l-5.5 5.5" />
+    </Icon>
+  );
+}
+
+/** Plays a player: a solid triangle, its corners rounded by the stroke. */
+export function PlayIcon({ xstyle }: IconProps = {}): ReactElement {
+  return (
+    <Icon xstyle={[styles.solid, xstyle]}>
+      <path d="M8.5 6.5v11l9-5.5z" />
+    </Icon>
+  );
+}
+
+export function PauseIcon({ xstyle }: IconProps = {}): ReactElement {
+  return (
+    <Icon xstyle={xstyle}>
+      <path d="M9 6.5v11M15 6.5v11" />
+    </Icon>
+  );
+}
+
+/** Plays a player, or a step of one, again from its start. */
+export function ReplayIcon({ xstyle }: IconProps = {}): ReactElement {
+  return (
+    <Icon xstyle={xstyle}>
+      <path d="M6.5 12a5.5 5.5 0 1 0 1.6-3.9M7 5.5v3.5h3.5" />
+    </Icon>
+  );
+}
+
 /** Opens somewhere outside the canvas. */
 export function ExternalLinkIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
@@ -577,6 +619,10 @@ const styles = stylex.create({
   filled: {
     fill: "currentColor",
     stroke: "none",
+  },
+  // Filled, and still stroked, so its corners stay round.
+  solid: {
+    fill: "currentColor",
   },
   grip: {
     flexShrink: 0,

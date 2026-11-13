@@ -1,0 +1,106 @@
+[
+  {
+    "key": "old-click",
+    "title": "Save calls the handler",
+    "caption": "The Save button calls its click handler.",
+    "label": "CLICK",
+    "moves": [
+      {
+        "from": "click",
+        "to": "handler"
+      }
+    ]
+  },
+  {
+    "key": "old-save",
+    "title": "The handler saves",
+    "caption": "The handler calls save with the form's fields, unchecked.",
+    "label": "SAVE",
+    "code": ["call-save"],
+    "moves": [
+      {
+        "from": "handler",
+        "to": "save"
+      }
+    ]
+  },
+  {
+    "key": "old-write",
+    "title": "Save writes the row itself",
+    "caption": "Save builds the UPDATE itself and runs it on the database.",
+    "label": "WRITE",
+    "code": ["old-write"],
+    "moves": [
+      {
+        "from": "save",
+        "to": "db",
+        "label": "UPDATE"
+      }
+    ]
+  },
+  {
+    "key": "new-click",
+    "title": "Save calls the handler",
+    "caption": "The Save button calls its click handler, as before.",
+    "label": "CLICK",
+    "moves": [
+      {
+        "from": "click",
+        "to": "handler"
+      }
+    ]
+  },
+  {
+    "key": "new-validate",
+    "title": "The handler validates first",
+    "label": "VALIDATE",
+    "caption": "New: bad input stops here.",
+    "code": ["call-validate"],
+    "moves": [
+      {
+        "from": "handler",
+        "to": "validate"
+      }
+    ]
+  },
+  {
+    "key": "new-save",
+    "title": "Then saves",
+    "caption": "Only valid input reaches save.",
+    "label": "SAVE",
+    "code": ["call-save"],
+    "moves": [
+      {
+        "from": "handler",
+        "to": "save"
+      }
+    ]
+  },
+  {
+    "key": "new-repository",
+    "title": "Save goes through the repository",
+    "caption": "Save no longer writes SQL: it hands the record to the repository.",
+    "label": "REPOSITORY",
+    "code": ["call-repository"],
+    "moves": [
+      {
+        "from": "save",
+        "to": "repository"
+      }
+    ]
+  },
+  {
+    "key": "new-write",
+    "title": "The repository writes the row",
+    "caption": "The repository writes the row with an UPSERT, so a new record saves too.",
+    "label": "WRITE",
+    "code": ["write"],
+    "moves": [
+      {
+        "from": "repository",
+        "to": "db",
+        "label": "UPSERT"
+      }
+    ]
+  }
+]

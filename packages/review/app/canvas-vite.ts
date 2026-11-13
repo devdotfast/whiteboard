@@ -22,6 +22,30 @@ const animeBundles = path.join(
   "dist/bundles",
 );
 
+// A diagram's stage runs ELK, d3 and Observable Plot from their browser
+// builds, sent as text when a script first lays out or charts.
+export const diagramLibraries = {
+  "@elk-bundles": path.join(
+    path.dirname(require.resolve("elkjs/package.json")),
+    "lib",
+  ),
+  "@d3-bundles": path.join(
+    // The package exports no package.json: step up from its entry.
+    path.dirname(require.resolve("d3")),
+    "../dist",
+  ),
+  "@three-bundles": path.join(
+    // The package exports no package.json: step up from its entry.
+    path.dirname(require.resolve("three")),
+    "../build",
+  ),
+  "@plot-bundles": path.join(
+    // The package exports no package.json: step up from its entry.
+    path.dirname(require.resolve("@observablehq/plot")),
+    "../dist",
+  ),
+};
+
 const decodeNamedCharacterReferenceIndex = path.join(
   path.dirname(require.resolve("decode-named-character-reference")),
   "index.js",
@@ -86,4 +110,5 @@ export const canvasAliases = {
   "@dev.fast/whiteboard-document": documentSource,
   "decode-named-character-reference": decodeNamedCharacterReferenceIndex,
   "@animejs-bundles": animeBundles,
+  ...diagramLibraries,
 } satisfies AliasOptions;

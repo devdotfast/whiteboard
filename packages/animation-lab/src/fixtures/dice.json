@@ -1,0 +1,43 @@
+{
+  "title": "Roll a die",
+  "description": "A three.js die, as one motion you can play and scrub.",
+  "stage": {
+    "width": 720,
+    "height": 360
+  },
+  "script": "import * as THREE from \"three\";\n\n// A die rolled across a table, drawn by three.js. Every pose is a pure\n// function of time, so the player can jump to any moment, either way.\nconst WIDTH = 720;\nconst HEIGHT = 360;\n\nconst renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });\nrenderer.setPixelRatio(devicePixelRatio);\nrenderer.setSize(WIDTH, HEIGHT);\nrenderer.shadowMap.enabled = true;\nrenderer.shadowMap.type = THREE.PCFSoftShadowMap;\ndocument.body.append(renderer.domElement);\n\nconst scene = new THREE.Scene();\nconst camera = new THREE.PerspectiveCamera(32, WIDTH / HEIGHT, 0.1, 100);\ncamera.position.set(0, 7.5, 6.5);\ncamera.lookAt(0, 0.3, 0.3);\n\nscene.add(new THREE.HemisphereLight(0xffffff, 0x8890a0, 1.6));\nconst sun = new THREE.DirectionalLight(0xffffff, 2.2);\nsun.position.set(-3, 8, 4);\nsun.castShadow = true;\nsun.shadow.mapSize.set(1024, 1024);\nsun.shadow.radius = 6;\nObject.assign(sun.shadow.camera, { left: -6, right: 6, top: 6, bottom: -6 });\nscene.add(sun);\n\n// The table only shows the die's shadow, so it reads on light and dark.\nconst table = new THREE.Mesh(\n  new THREE.PlaneGeometry(30, 30),\n  new THREE.ShadowMaterial({ opacity: 0.18 }),\n);\ntable.rotation.x = -Math.PI / 2;\ntable.receiveShadow = true;\nscene.add(table);\n\n// Faces drawn on canvases. Opposite faces add up to seven; five is on top\n// when the die is unrotated, which is how it lands.\nconst PIPS = {\n  1: [[0.5, 0.5]],\n  2: [[0.27, 0.27], [0.73, 0.73]],\n  3: [[0.27, 0.27], [0.5, 0.5], [0.73, 0.73]],\n  4: [[0.27, 0.27], [0.73, 0.27], [0.27, 0.73], [0.73, 0.73]],\n  5: [[0.27, 0.27], [0.73, 0.27], [0.5, 0.5], [0.27, 0.73], [0.73, 0.73]],\n  6: [[0.27, 0.24], [0.73, 0.24], [0.27, 0.5], [0.73, 0.5], [0.27, 0.76], [0.73, 0.76]],\n};\n\nconst face = (count) => {\n  const canvas = document.createElement(\"canvas\");\n  canvas.width = canvas.height = 256;\n  const context = canvas.getContext(\"2d\");\n  context.fillStyle = \"#fbfbf8\";\n  context.fillRect(0, 0, 256, 256);\n  context.fillStyle = count === 1 ? \"#d8402c\" : \"#15181e\";\n  for (const [x, y] of PIPS[count]) {\n    context.beginPath();\n    context.arc(x * 256, y * 256, count === 1 ? 30 : 22, 0, Math.PI * 2);\n    context.fill();\n  }\n  const texture = new THREE.CanvasTexture(canvas);\n  texture.colorSpace = THREE.SRGBColorSpace;\n  return new THREE.MeshStandardMaterial({ map: texture, roughness: 0.45 });\n};\n\n// Box faces in three.js order: +x, -x, +y, -y, +z, -z.\nconst die = new THREE.Mesh(\n  new THREE.BoxGeometry(1, 1, 1),\n  [3, 4, 5, 2, 1, 6].map(face),\n);\ndie.castShadow = true;\nscene.add(die);\n\n// The die lives on a canvas, so it tells wb where it is on screen: the\n// box around its eight corners, projected through the camera.\nconst bounds = new THREE.Box3();\nconst corner = new THREE.Vector3();\n\nwb.selectable({\n  id: \"die\",\n  label: \"Die\",\n  kind: \"object\",\n  rect() {\n    bounds.setFromObject(die);\n    const canvas = renderer.domElement.getBoundingClientRect();\n    let [left, top, right, bottom] = [Infinity, Infinity, -Infinity, -Infinity];\n\n    for (const x of [bounds.min.x, bounds.max.x])\n      for (const y of [bounds.min.y, bounds.max.y])\n        for (const z of [bounds.min.z, bounds.max.z]) {\n          corner.set(x, y, z).project(camera);\n          const px = canvas.left + ((corner.x + 1) / 2) * canvas.width;\n          const py = canvas.top + ((1 - corner.y) / 2) * canvas.height;\n          left = Math.min(left, px);\n          right = Math.max(right, px);\n          top = Math.min(top, py);\n          bottom = Math.max(bottom, py);\n        }\n\n    return new DOMRect(left, top, right - left, bottom - top);\n  },\n});\n\n// The result, shown once the die is still.\ndocument.head.insertAdjacentHTML(\"beforeend\", `<style>\n  body { position: relative; font: 13px Inter, system-ui; color: light-dark(#15181e, #eef0f4); }\n  .result { position: absolute; top: 24px; right: 28px; display: flex; align-items: baseline; gap: 8px; opacity: 0; }\n  .result b { font-size: 34px; line-height: 1; font-weight: 700; }\n  .result span { color: light-dark(#5d6472, #9199a8); }\n</style>`);\ndocument.body.insertAdjacentHTML(\"beforeend\", '<div class=\"result\"><span>Rolled a</span><b>5</b></div>');\nconst result = document.querySelector(\".result\");\n\nconst clamp = (value) => Math.min(Math.max(value, 0), 1);\nconst easeOut = (p) => 1 - (1 - p) ** 3;\nconst lerp = (a, b, p) => a + (b - a) * p;\n\n// A hop from height `from` to `to` that peaks `lift` above the higher end.\nconst arc = (from, to, lift, p) => {\n  const top = Math.max(from, to) + lift;\n  return p < 0.5\n    ? lerp(from, top, 1 - (1 - p * 2) ** 2)\n    : lerp(top, to, ((p - 0.5) * 2) ** 2);\n};\n\nconst REST = 0.5;\n// Whole turns left to spin out, so the die ends with five up.\nconst SPIN = { x: Math.PI * 8, z: Math.PI * 4, y: Math.PI * 2 };\n\nconst pose = (time) => {\n  const [shake, toss, bounce, settle] = wb.chapters.map((chapter) => chapter.duration);\n  const t1 = shake;\n  const t2 = t1 + toss;\n  const t3 = t2 + bounce;\n  const t4 = t3 + settle;\n\n  // How much spin is left: all of it until the throw, none once settled.\n  const spun = easeOut(clamp((time - t1) / (t4 - t1)));\n  let x;\n  let y;\n  let wobble = 0;\n\n  if (time < t1) {\n    // Shaken in the hand, above the table on the left.\n    const p = time / shake;\n    x = -3 + Math.sin(p * Math.PI * 6) * 0.08;\n    y = 1.8 + Math.abs(Math.sin(p * Math.PI * 6)) * 0.15;\n    wobble = Math.sin(p * Math.PI * 10) * 0.3;\n  } else if (time < t2) {\n    const p = (time - t1) / toss;\n    x = lerp(-3, -1.2, p);\n    y = arc(1.8, REST, 0.6, p);\n  } else if (time < t3) {\n    // Two bounces, each lower than the last.\n    const p = (time - t2) / bounce;\n    x = lerp(-1.2, 0.7, p);\n    y = p < 0.6 ? arc(REST, REST, 0.9, p / 0.6) : arc(REST, REST, 0.3, (p - 0.6) / 0.4);\n  } else {\n    const p = clamp((time - t3) / settle);\n    x = lerp(0.7, 1.1, easeOut(p));\n    y = REST;\n  }\n\n  return {\n    x,\n    y,\n    rx: SPIN.x * (1 - spun) + wobble,\n    // A quarter-turn short of square, so two side faces show at rest.\n    ry: SPIN.y * (1 - spun) + 0.45,\n    rz: SPIN.z * (1 - spun) - wobble * 0.5,\n  };\n};\n\nwb.onTime((time, { chapter, chapterTime }) => {\n  const { x, y, rx, ry, rz } = pose(time);\n  die.position.set(x, y, 0);\n  die.rotation.set(rx, ry, rz);\n  result.style.opacity = chapter.id === \"result\" ? String(clamp(chapterTime / 300)) : \"0\";\n  renderer.render(scene, camera);\n});\n",
+  "timeline": {
+    "chapters": [
+      {
+        "id": "shake",
+        "label": "Shake",
+        "caption": "The die rattles in the hand before the throw.",
+        "duration": 800
+      },
+      {
+        "id": "throw",
+        "label": "Throw",
+        "caption": "Thrown, it spins fast as it arcs towards the table.",
+        "duration": 700
+      },
+      {
+        "id": "bounce",
+        "label": "Bounce",
+        "caption": "It bounces twice, each lower, losing spin each time.",
+        "duration": 900
+      },
+      {
+        "id": "settle",
+        "label": "Settle",
+        "caption": "It rolls out the last of its spin and comes to rest.",
+        "duration": 900
+      },
+      {
+        "id": "result",
+        "label": "Result",
+        "caption": "Five faces up.",
+        "duration": 800
+      }
+    ]
+  }
+}

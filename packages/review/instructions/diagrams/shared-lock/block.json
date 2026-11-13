@@ -1,0 +1,14 @@
+{
+  "title": "A lease lock with fencing tokens",
+  "description": "Two workers share a lock and a store. A worker that pauses past its lease writes with an old token, and the store refuses it.",
+  "code": {
+    "acquire": {
+      "source": "head/lock/service.go#L20-L44",
+      "label": "Grant a lease and a token"
+    },
+    "check-token": {
+      "source": "head/store/write.go#L31",
+      "label": "Refuse an old token"
+    }
+  }
+}

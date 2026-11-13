@@ -1,0 +1,46 @@
+{
+  "title": "Saving settings, before and after",
+  "description": "The change puts validation and a repository between the form and the database.",
+  "code": {
+    "on-save": {
+      "source": "head/src/settings/form.tsx#L40-L58",
+      "label": "onSave"
+    },
+    "validate": {
+      "source": "head/src/settings/validate.ts#L5-L30",
+      "label": "validateSettings"
+    },
+    "save": {
+      "source": "head/src/settings/save.ts#L8-L25",
+      "label": "saveSettings"
+    },
+    "repository": {
+      "source": "head/src/settings/repository.ts#L12-L34",
+      "label": "SettingsRepository.put"
+    },
+    "table": {
+      "source": "head/src/settings/schema.sql#L1-L8",
+      "label": "settings table"
+    },
+    "call-validate": {
+      "source": "head/src/settings/form.tsx#L44",
+      "label": "Calls validate"
+    },
+    "call-save": {
+      "source": "head/src/settings/form.tsx#L49",
+      "label": "Calls save"
+    },
+    "old-write": {
+      "source": "base/src/settings/save.ts#L14",
+      "label": "Old direct write"
+    },
+    "call-repository": {
+      "source": "head/src/settings/save.ts#L17",
+      "label": "Calls the repository"
+    },
+    "write": {
+      "source": "head/src/settings/repository.ts#L22",
+      "label": "Upsert"
+    }
+  }
+}
