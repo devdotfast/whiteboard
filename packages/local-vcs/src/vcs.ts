@@ -2082,7 +2082,21 @@ function parseDiffGitHeaderPaths(
   line: string,
 ): { oldPath: string; newPath: string } | null {
   if (!line.startsWith("diff --git ")) return null;
-  const tokens = line.slice("diff --git ".length).match(/"([^"\\]|\\.)*"|\S+/g);
+  const names = line.slice("diff --git ".length);
+
+  // Git does not quote a space, so one path named twice splits at its middle.
+  const middle = (names.length - 1) / 2;
+
+  if (names[middle] === " ") {
+    const oldPath = stripDiffPathPrefix(unquoteGitPath(names.slice(0, middle)));
+
+    if (
+      oldPath === stripDiffPathPrefix(unquoteGitPath(names.slice(middle + 1)))
+    )
+      return { oldPath, newPath: oldPath };
+  }
+
+  const tokens = names.match(/"([^"\\]|\\.)*"|\S+/g);
 
   if (!tokens || tokens.length < 2) return null;
 
