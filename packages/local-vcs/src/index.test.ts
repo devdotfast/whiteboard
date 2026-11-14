@@ -584,6 +584,47 @@ describe("local vcs", () => {
     ]);
   });
 
+  it("reads a path with spaces from a file section that has only a header", () => {
+    const patch = [
+      "diff --git a/docs/Screen Shot 1.png b/docs/Screen Shot 1.png",
+      "new file mode 100644",
+      "index 0000000..9c2e1f3",
+      "Binary files /dev/null and b/docs/Screen Shot 1.png differ",
+      "diff --git a/run me.sh b/run me.sh",
+      "old mode 100644",
+      "new mode 100755",
+      "diff --git a/old notes.md b/old notes.md",
+      "deleted file mode 100644",
+      "index e69de29..0000000",
+      "",
+    ].join("\n");
+
+    expect(splitGitPatchFiles(patch).map((entry) => entry.file)).toEqual([
+      {
+        path: "docs/Screen Shot 1.png",
+        previousPath: undefined,
+        status: "added",
+        additions: 0,
+        deletions: 0,
+        binary: true,
+      },
+      {
+        path: "run me.sh",
+        previousPath: undefined,
+        status: "modified",
+        additions: 0,
+        deletions: 0,
+      },
+      {
+        path: "old notes.md",
+        previousPath: undefined,
+        status: "deleted",
+        additions: 0,
+        deletions: 0,
+      },
+    ]);
+  });
+
   it("refuses a diff whose counts arrive before its records", () => {
     const records = [
       "1\t0\tsrc/app.ts",
