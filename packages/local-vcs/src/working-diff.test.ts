@@ -15,7 +15,11 @@ import path from "node:path";
 
 import { expect, it } from "vitest";
 
-import { diffFileSummariesWorkingTree, diffWorkingTree } from "./index";
+import {
+  diffFileSummariesWorkingTree,
+  diffWorkingTree,
+  splitGitPatchFiles,
+} from "./index";
 
 it.each([false, true])(
   "diffs final working bytes without modifying repository state (split index: %s)",
@@ -218,3 +222,47 @@ it("sees a same-size rewrite that only Git's racy-index check can catch", async 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+it.each(["diff.mnemonicPrefix", "diff.noprefix"])(
+  "keeps a/ and b/ patch prefixes when the user's Git config sets %s",
+  async (setting) => {
+    const root = await mkdtemp(path.join(tmpdir(), "working-diff-prefix-"));
+
+    const git = (...args: string[]) =>
+      execFileSync("git", ["-C", root, ...args], { encoding: "utf8" }).trim();
+
+    try {
+      git("init", "-q");
+      await mkdir(path.join(root, "a"));
+      await writeFile(path.join(root, "a", "util.ts"), "base\n");
+      await writeFile(path.join(root, "app.ts"), "base\n");
+      git("add", ".");
+      git(
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.invalid",
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "-qm",
+        "base",
+      );
+      await writeFile(path.join(root, "a", "util.ts"), "working\n");
+      await writeFile(path.join(root, "app.ts"), "working\n");
+      git("config", setting, "true");
+
+      const patch = await diffWorkingTree({
+        rootPath: root,
+        kind: "git",
+        baseRef: git("rev-parse", "HEAD"),
+      });
+
+      expect(splitGitPatchFiles(patch).map((entry) => entry.file.path)).toEqual(
+        ["a/util.ts", "app.ts"],
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
