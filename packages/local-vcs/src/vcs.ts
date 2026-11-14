@@ -1768,6 +1768,9 @@ async function readGitDiff(input: {
     "--no-ext-diff",
     "--no-textconv",
     "--no-color",
+    // Pinned: diff.mnemonicPrefix, diff.noprefix and diff.srcPrefix change them.
+    "--src-prefix=a/",
+    "--dst-prefix=b/",
     "-M",
     ...(input.contextLines !== undefined
       ? [`--unified=${input.contextLines}`]
