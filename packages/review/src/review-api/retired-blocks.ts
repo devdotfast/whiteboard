@@ -14,7 +14,6 @@ export const RETIRED_BLOCK_TYPES = [
   "clip",
   "flow_diagram",
   "sequence",
-  "call_stack_diff",
 ] as const;
 
 const retired = new Set<string>(RETIRED_BLOCK_TYPES);

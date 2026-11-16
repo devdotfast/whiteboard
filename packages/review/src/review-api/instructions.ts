@@ -64,8 +64,6 @@ const GUIDE: Record<"on" | "off", Record<string, string>> = {
       "      - `flow_diagram` if the interesting part is branches, retries or state transitions",
       "      - `database_lens` if the interesting part is a schema change to the data stores, and/or who reads/writes it",
     ].join("\n"),
-    "implementation-diagram":
-      "    - `call_stack_diff` for the old vs. new path through user flows. always root the flows in the user/agent entry point (eg a button click, CLI command, etc.), including unchanged nodes along the way.",
     visuals:
       "`code_peek`, `sequence`, `flow_diagram`, `call_stack_diff` or `database_lens`",
   },
@@ -75,9 +73,7 @@ const GUIDE: Record<"on" | "off", Record<string, string>> = {
       "      - a `diagram` of the parts and the wires between them, with steps that move a request along the wires if participants interact over time (who calls whom, async handoffs), and scenarios for branches, retries or other paths",
       "      - `database_lens` if the interesting part is a schema change to the data stores, and/or who reads/writes it",
     ].join("\n"),
-    "implementation-diagram":
-      "    - a `diagram` of the old vs. new path through user flows, as two scenarios (before, after) whose steps walk the calls. always root the flows in the user/agent entry point (eg a button click, CLI command, etc.), including unchanged nodes along the way. link every node and wire to its code.",
-    visuals: "`code_peek`, `diagram` or `database_lens`",
+    visuals: "`code_peek`, `diagram`, `call_stack_diff` or `database_lens`",
   },
 };
 

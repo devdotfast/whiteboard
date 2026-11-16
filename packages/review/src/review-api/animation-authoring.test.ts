@@ -343,17 +343,13 @@ it("gates diagrams with animations, and with them retires the kinds a diagram re
     );
     await insert(sequence);
 
-    // On: diagrams, and no new sequence, flow or call stack from agents.
+    // On: diagrams, and no new sequence or flow from agents.
     enabled = true;
     const guide = await client.read<string>("/instructions");
     expect(guide).toContain("- diagram ");
     expect(guide).toContain('session_get_instructions({topic:\"diagram\"})');
 
-    for (const retired of [
-      "- sequence ",
-      "- flow_diagram ",
-      "- call_stack_diff ",
-    ])
+    for (const retired of ["- sequence ", "- flow_diagram "])
       expect(guide).not.toContain(retired);
 
     await insert(diagram);
