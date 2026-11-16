@@ -60,7 +60,19 @@ try {
     if (entry.includes(marker))
       throw new Error(`index.js bundles ${marker.replace(/-$/, "")}`);
 
-  for (const file of files.filter((name) => name.endsWith(".js"))) {
+  const scripts = files.filter((name) => name.endsWith(".js"));
+
+  // ProseMirror is a peer: the editor imports the host's copy.
+  if (
+    !scripts.some((file) =>
+      /from\s*["'`]@tiptap\/pm\/view["'`]/.test(
+        readFileSync(path.join(out, file), "utf8"),
+      ),
+    )
+  )
+    throw new Error(`${tarball} bundles ProseMirror`);
+
+  for (const file of scripts) {
     const code = readFileSync(path.join(out, file), "utf8");
 
     // React is external: a CommonJS require of it throws in a browser.
