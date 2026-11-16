@@ -1,0 +1,12 @@
+[
+  {
+    "key": "allowed",
+    "label": "A call passes",
+    "frames": ["call", "pass", "read", "answer"]
+  },
+  {
+    "key": "refused",
+    "label": "A burst is refused",
+    "frames": ["empty", "late", "refuse"]
+  }
+]

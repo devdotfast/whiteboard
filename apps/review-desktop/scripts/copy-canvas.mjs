@@ -88,7 +88,29 @@ export async function copyCanvas(targets = canvasTargets([])) {
         stylesheets,
       }),
     );
+    await writeFile(
+      path.join(targetRoot, "render.html"),
+      renderPageSource({ canvasFile: canvas.file, stylesheets }),
+    );
   }
+}
+
+/** The page a hidden window loads to render one block for an agent. */
+export function renderPageSource({ canvasFile, stylesheets }) {
+  return [
+    "<!doctype html>",
+    '<html><head><meta charset="utf-8">',
+    ...stylesheets.map(
+      (file) => `<link rel="stylesheet" href=${JSON.stringify(`./${file}`)}>`,
+    ),
+    "<style>html, body { margin: 0; }</style>",
+    '</head><body><div id="root"></div>',
+    '<script type="module">',
+    `import { reviewRenderPage } from ${JSON.stringify(`./${canvasFile}`)};`,
+    'globalThis.reviewRender = reviewRenderPage(document.getElementById("root"));',
+    "</script></body></html>",
+    "",
+  ].join("\n");
 }
 
 export function canvasLoaderSource({ canvasFile, wasmFile, stylesheets }) {

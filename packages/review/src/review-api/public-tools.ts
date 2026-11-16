@@ -14,6 +14,8 @@ import {
 import {
   type ReadBlock,
   checkoutAnimation,
+  diagramReferenceText,
+  readAnimationFolder,
   recordPublish,
   resolveDraftEdit,
   stageReferenceText,
@@ -133,9 +135,17 @@ export async function callPublicTool(
     return withoutRepositoryIds(block);
   };
 
-  if (tool.name === "session_get_instructions" && rest.topic === "animation") {
+  if (
+    tool.name === "session_get_instructions" &&
+    (rest.topic === "animation" || rest.topic === "diagram")
+  ) {
     const instructions = await callAuthoringTool(client, tool, fields, signal);
-    const hint = stageReferenceText(await writeStageReference());
+    const reference = await writeStageReference();
+
+    const hint =
+      rest.topic === "diagram"
+        ? diagramReferenceText(reference)
+        : stageReferenceText(reference);
 
     if (instructions instanceof ToolText)
       return new ToolText(`${instructions.text}\n\n${hint}`);
@@ -156,6 +166,37 @@ export async function callPublicTool(
       sessionId,
       targetId,
       isStringValue(dir) ? dir : undefined,
+    );
+  }
+
+  if (tool.name === "session_render" && "fromFiles" in rest) {
+    const { fromFiles, targetId, frame } = rest;
+
+    if (!isStringValue(sessionId) || !isStringValue(fromFiles) || !fromFiles)
+      throw new ReviewInputError("sessionId and fromFiles are required.");
+
+    if (targetId !== undefined && targetId !== null)
+      throw new ReviewInputError(
+        "Give fromFiles to render a draft or targetId to render a published block, not both.",
+      );
+
+    const directory = path.resolve(fromFiles);
+
+    // The folder is read and checked here, beside the agent, as a publish's
+    // is; the host draws what it holds and saves nothing.
+    const drawn = await client.post<JsonValue>(
+      `/${encodeURIComponent(sessionId)}/render`,
+      {
+        content: await readAnimationFolder(directory),
+        ...(isStringValue(frame) && { frame }),
+      },
+      signal,
+    );
+
+    return saveRenderedFrame(
+      withoutRepositoryIds(publicResult(drawn)),
+      sessionId,
+      `draft-${path.basename(directory)}`,
     );
   }
 
@@ -233,12 +274,34 @@ async function saveRenderedFrame(
   sessionId: string,
   targetId: string,
 ): Promise<JsonValue> {
+  // Every frame at once: each PNG goes to its own file, and the result
+  // names the files rather than carrying the images.
+  if (isJsonObject(result) && Array.isArray(result.frames))
+    return {
+      ...result,
+      frames: await Promise.all(
+        result.frames.map(async (frame) => {
+          const saved = await saveRenderedFrame(frame, sessionId, targetId);
+
+          if (!isJsonObject(saved) || !isStringValue(saved.file)) return saved;
+          const { png: _png, ...rest } = saved;
+
+          return rest;
+        }),
+      ),
+    };
+
   if (!isJsonObject(result) || !isStringValue(result.png)) return result;
 
-  const key =
+  const frame =
     isJsonObject(result.frame) && isStringValue(result.frame.key)
       ? result.frame.key
       : "frame";
+
+  // A frame shared by scenarios renders once in each.
+  const key = isStringValue(result.scenario)
+    ? `${result.scenario}-${frame}`
+    : frame;
 
   const file = path.join(
     devReviewHome(),

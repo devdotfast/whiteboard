@@ -1,0 +1,438 @@
+{
+  "title": "Streaming service",
+  "description": "A streaming platform grouped by the team that owns each part. Pick a request and step through it.",
+  "stage": {
+    "width": 1280,
+    "height": 560
+  },
+  "script": "// A streaming service: nodes, the edges between them, then the groups\n// around them, inner groups before the boundary that holds them. Nothing\n// is placed by hand: wb.layout() lines it all up at the end.\nconst size = { width: 150, height: 56 };\n\n// Each node names the code that defines it; Sessions is left unlinked.\nconst definedIn = {\n  web: \"web-app\", tv: \"tv-app\", gateway: \"gateway\", playback: \"playback\",\n  drm: \"drm\", catalog: \"catalog\", search: \"search\", transcoder: \"transcoder\",\n  segments: \"segments\", accounts: \"accounts\", events: \"events\",\n};\n\nconst node = (id, kind, label, tag) =>\n  wb.node({ id, kind, label, tag, ...size, code: definedIn[id] });\n\nconst n = {\n  viewer: node(\"viewer\", \"person\", \"Viewer\"),\n  web: node(\"web\", \"container\", \"Web app\", \"Container \u00b7 React\"),\n  tv: node(\"tv\", \"container\", \"TV app\", \"Container \u00b7 Kotlin\"),\n  payments: node(\"payments\", \"external\", \"Payments\", \"External \u00b7 Stripe\"),\n  gateway: node(\"gateway\", \"container\", \"API gateway\", \"Container \u00b7 Go\"),\n  playback: node(\"playback\", \"container\", \"Playback API\", \"Container \u00b7 Go\"),\n  drm: node(\"drm\", \"container\", \"DRM licences\", \"Container \u00b7 Go\"),\n  catalog: node(\"catalog\", \"container\", \"Catalog API\", \"Container \u00b7 Node.js\"),\n  search: node(\"search\", \"container\", \"Search\", \"Container \u00b7 Elastic\"),\n  transcoder: node(\"transcoder\", \"container\", \"Transcoder\", \"Container \u00b7 FFmpeg\"),\n  segments: node(\"segments\", \"database\", \"Video segments\", \"Database \u00b7 S3\"),\n  accounts: node(\"accounts\", \"database\", \"Accounts\", \"Database \u00b7 Postgres\"),\n  sessions: node(\"sessions\", \"database\", \"Sessions\", \"Database \u00b7 Redis\"),\n  events: node(\"events\", \"queue\", \"Events\", \"Queue \u00b7 Kafka\"),\n};\n\n// Each edge names its call site, the line where one side calls the other.\n// A person's edges are not code; the edge to Payments is not linked yet.\n// Labels say how each call travels.\nconst wires = [];\n\nconst link = (from, to, options = {}) =>\n  wires.push({ from, to, path: wb.edge({ from: n[from], to: n[to], ...options }) });\n\nlink(\"viewer\", \"web\");\nlink(\"viewer\", \"tv\");\nlink(\"web\", \"gateway\", { label: \"HTTPS\", code: \"web-search-call\" });\nlink(\"tv\", \"gateway\", { label: \"HTTPS\", code: \"tv-play-call\" });\nlink(\"tv\", \"payments\", { dashed: true, code: [] });\nlink(\"gateway\", \"playback\", { label: \"gRPC\", code: \"gateway-manifest\" });\nlink(\"gateway\", \"catalog\", { label: \"gRPC\", code: [\"gateway-title\", \"gateway-search\"] });\nlink(\"playback\", \"drm\", { code: \"playback-licence\" });\nlink(\"drm\", \"accounts\", { label: \"SQL\", code: \"drm-plan-query\" });\nlink(\"catalog\", \"search\", { code: \"catalog-elastic\" });\nlink(\"search\", \"sessions\", { code: \"search-history\" });\nlink(\"transcoder\", \"segments\", { code: \"transcoder-put\" });\nlink(\"segments\", \"events\", { label: \"S3 event\", code: \"segments-notify\" });\n\n// Groups, inner first. Colour says which team owns what.\nconst g = {\n  clients: wb.group({ id: \"clients\", label: \"Client apps\", around: [n.web, n.tv], color: \"sky\" }),\n  playback: wb.group({ id: \"playback-team\", label: \"Playback\", around: [n.playback, n.drm], color: \"violet\" }),\n  catalog: wb.group({ id: \"catalog-team\", label: \"Catalog\", around: [n.catalog, n.search], color: \"amber\" }),\n  encoding: wb.group({ id: \"encoding-team\", label: \"Encoding\", around: [n.transcoder, n.segments], color: \"coral\" }),\n  data: wb.group({ id: \"data-team\", label: \"Data\", around: [n.accounts, n.sessions, n.events], color: \"green\" }),\n};\ng.platform = wb.group({\n  id: \"platform\",\n  label: \"Streaming platform\",\n  tag: \"Software system\",\n  around: [n.gateway, g.playback, g.catalog, g.encoding, g.data],\n});\n\nawait wb.layout({ direction: \"right\" });\n\n// Which group each node sits in, to light the groups a request passes.\nconst home = {\n  web: \"clients\", tv: \"clients\",\n  playback: \"playback\", drm: \"playback\",\n  catalog: \"catalog\", search: \"catalog\",\n  transcoder: \"encoding\", segments: \"encoding\",\n  accounts: \"data\", sessions: \"data\", events: \"data\",\n};\n\n// Each scenario is one request; each of its frames is a step, and\n// `frame.data.moves` are the movements in that step, which run together.\n// A move against a wire's direction is a reply unless it says otherwise.\nconst movesOf = (frame) => frame?.data?.moves ?? [];\nconst scenarioMoves = () => (wb.scenario?.frames ?? []).flatMap(movesOf);\n\nconst findWire = (from, to) => {\n  const forward = wires.find((w) => w.from === from && w.to === to);\n  if (forward) return { line: forward, reverse: false };\n  return { line: wires.find((w) => w.from === to && w.to === from), reverse: true };\n};\n\nconst light = () => {\n  const all = scenarioMoves();\n  if (!all.length) {\n    for (const element of [...Object.values(n), ...Object.values(g)]) element.dataset.state = \"default\";\n    for (const { path } of wires) path.dataset.state = \"default\";\n    return;\n  }\n\n  const sofar = wb.scenario.frames.slice(0, wb.frameIndex + 1).flatMap(movesOf);\n  const touched = new Set(all.flatMap((m) => [m.from, m.to]));\n  const reached = new Set(sofar.flatMap((m) => [m.from, m.to]));\n  const used = new Set(sofar.map((m) => findWire(m.from, m.to).line));\n  const groups = new Set([...touched].map((key) => home[key]).filter(Boolean));\n\n  for (const [key, element] of Object.entries(n))\n    element.dataset.state = reached.has(key) ? \"active\" : touched.has(key) || home[key] ? \"default\" : \"dimmed\";\n  for (const [key, element] of Object.entries(g))\n    element.dataset.state = key === \"platform\" ? \"default\" : groups.has(key) ? \"active\" : \"dimmed\";\n  for (const w of wires) {\n    const ours = all.some((m) => findWire(m.from, m.to).line === w);\n    w.path.dataset.state = used.has(w) ? \"active\" : ours ? \"default\" : \"dimmed\";\n  }\n};\n\nconst wait = (ms, signal) =>\n  new Promise((resolve) => {\n    const timer = setTimeout(resolve, ms);\n    signal.addEventListener(\"abort\", () => { clearTimeout(timer); resolve(); }, { once: true });\n  });\n\n// One move: a token rides its wire once and rests at the far end. The\n// reader replays the step to see it again.\nconst move = async ({ from, to, label, reply, delay = 0 }, signal) => {\n  const { line, reverse } = findWire(from, to);\n  const token = wb.token({ label, tone: reply ?? reverse ? \"reply\" : \"request\" });\n  signal.addEventListener(\"abort\", () => token.remove(), { once: true });\n\n  await wait(delay, signal);\n  if (!signal.aborted) await wb.travel(token, line.path, { reverse, signal });\n};\n\nlet running = null;\n\nwb.onFrame((frame) => {\n  running?.abort();\n  running = new AbortController();\n  light();\n  for (const step of movesOf(frame)) move(step, running.signal);\n});\n",
+  "scenarios": [
+    {
+      "id": "overview",
+      "label": "Overview",
+      "frames": [
+        {
+          "id": "overview",
+          "label": "Overview",
+          "caption": "Four teams own the platform; client apps sit outside it.",
+          "data": {
+            "moves": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "play",
+      "label": "Play",
+      "frames": [
+        {
+          "id": "play-press",
+          "label": "Press play",
+          "caption": "The viewer presses play on episode 4 in the TV app.",
+          "code": ["tv-app"],
+          "data": {
+            "moves": [
+              {
+                "from": "viewer",
+                "to": "tv",
+                "label": "Play ep. 4"
+              }
+            ]
+          }
+        },
+        {
+          "id": "play-request",
+          "label": "Request",
+          "caption": "The TV app asks the gateway for something to play.",
+          "code": ["tv-play-call"],
+          "data": {
+            "moves": [
+              {
+                "from": "tv",
+                "to": "gateway",
+                "label": "GET /play/42"
+              }
+            ]
+          }
+        },
+        {
+          "id": "play-fan-out",
+          "label": "Fan out",
+          "caption": "The gateway asks Playback for a manifest and Catalog for the title, at the same time.",
+          "code": ["gateway-manifest", "gateway-title"],
+          "data": {
+            "moves": [
+              {
+                "from": "gateway",
+                "to": "playback",
+                "label": "manifest?"
+              },
+              {
+                "from": "gateway",
+                "to": "catalog",
+                "label": "title?"
+              }
+            ]
+          }
+        },
+        {
+          "id": "play-licence",
+          "label": "Licence",
+          "caption": "Playback needs a DRM licence before it hands out a manifest.",
+          "code": ["playback-licence"],
+          "data": {
+            "moves": [
+              {
+                "from": "playback",
+                "to": "drm",
+                "label": "licence?"
+              }
+            ]
+          }
+        },
+        {
+          "id": "play-plan",
+          "label": "Plan",
+          "caption": "DRM checks the viewer's plan with Accounts.",
+          "code": ["drm-plan-query"],
+          "data": {
+            "moves": [
+              {
+                "from": "drm",
+                "to": "accounts",
+                "label": "plan?"
+              }
+            ]
+          }
+        },
+        {
+          "id": "play-licensed",
+          "label": "Licensed",
+          "caption": "The plan is Premium, so DRM issues a licence.",
+          "code": ["drm-plan-query"],
+          "data": {
+            "moves": [
+              {
+                "from": "accounts",
+                "to": "drm",
+                "label": "Premium"
+              }
+            ]
+          }
+        },
+        {
+          "id": "play-fan-in",
+          "label": "Fan in",
+          "caption": "Playback's manifest and Catalog's title both come back to the gateway.",
+          "code": ["playback-licence", "gateway-manifest", "gateway-title"],
+          "data": {
+            "moves": [
+              {
+                "from": "drm",
+                "to": "playback",
+                "label": "licence"
+              },
+              {
+                "from": "playback",
+                "to": "gateway",
+                "label": "manifest",
+                "delay": 400
+              },
+              {
+                "from": "catalog",
+                "to": "gateway",
+                "label": "title"
+              }
+            ]
+          }
+        },
+        {
+          "id": "play-start",
+          "label": "Start",
+          "caption": "The gateway answers the TV app, which starts the stream.",
+          "code": ["tv-play-call"],
+          "data": {
+            "moves": [
+              {
+                "from": "gateway",
+                "to": "tv",
+                "label": "manifest + title"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "browse",
+      "label": "Browse",
+      "frames": [
+        {
+          "id": "browse-search",
+          "label": "Search",
+          "caption": "The viewer searches for \u201cdrama\u201d on the web.",
+          "code": ["web-search-call"],
+          "data": {
+            "moves": [
+              {
+                "from": "viewer",
+                "to": "web",
+                "label": "\u201cdrama\u201d"
+              }
+            ]
+          }
+        },
+        {
+          "id": "browse-request",
+          "label": "Request",
+          "caption": "The web app sends the search through the gateway.",
+          "code": ["web-search-call"],
+          "data": {
+            "moves": [
+              {
+                "from": "web",
+                "to": "gateway",
+                "label": "GET /search"
+              }
+            ]
+          }
+        },
+        {
+          "id": "browse-route",
+          "label": "Route",
+          "caption": "The gateway routes it to Catalog.",
+          "code": ["gateway-search"],
+          "data": {
+            "moves": [
+              {
+                "from": "gateway",
+                "to": "catalog",
+                "label": "GET /search"
+              }
+            ]
+          }
+        },
+        {
+          "id": "browse-query",
+          "label": "Query",
+          "caption": "Catalog queries Search.",
+          "code": ["catalog-elastic"],
+          "data": {
+            "moves": [
+              {
+                "from": "catalog",
+                "to": "search",
+                "label": "drama"
+              }
+            ]
+          }
+        },
+        {
+          "id": "browse-history",
+          "label": "History",
+          "caption": "Search reads the viewer's recent history to rank results.",
+          "code": ["search-history"],
+          "data": {
+            "moves": [
+              {
+                "from": "search",
+                "to": "sessions",
+                "label": "history?"
+              }
+            ]
+          }
+        },
+        {
+          "id": "browse-rank",
+          "label": "Rank",
+          "caption": "Sessions answers, and Search returns ranked hits.",
+          "code": ["search-history", "catalog-elastic"],
+          "data": {
+            "moves": [
+              {
+                "from": "sessions",
+                "to": "search",
+                "label": "recent"
+              },
+              {
+                "from": "search",
+                "to": "catalog",
+                "label": "24 hits",
+                "delay": 700
+              }
+            ]
+          }
+        },
+        {
+          "id": "browse-results",
+          "label": "Results",
+          "caption": "Catalog's titles go back through the gateway to the web app.",
+          "code": ["gateway-search", "web-search-call"],
+          "data": {
+            "moves": [
+              {
+                "from": "catalog",
+                "to": "gateway",
+                "label": "24 titles"
+              },
+              {
+                "from": "gateway",
+                "to": "web",
+                "label": "24 titles",
+                "delay": 700
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "upload",
+      "label": "Upload",
+      "frames": [
+        {
+          "id": "upload-transcode",
+          "label": "Transcode",
+          "caption": "A new episode is transcoded into 720p, 1080p and 4K renditions, stored as segments.",
+          "code": ["transcoder-put"],
+          "data": {
+            "moves": [
+              {
+                "from": "transcoder",
+                "to": "segments",
+                "label": "3 renditions"
+              }
+            ]
+          }
+        },
+        {
+          "id": "upload-announce",
+          "label": "Announce",
+          "caption": "Once the segments are stored, Encoding announces the title on Events.",
+          "code": ["segments-notify"],
+          "data": {
+            "moves": [
+              {
+                "from": "segments",
+                "to": "events",
+                "label": "video.ready"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "code": {
+    "web-app": {
+      "anchor": "head/apps/web/src/main.tsx#L4",
+      "evidence": "createRoot(",
+      "title": "Web app entry point"
+    },
+    "tv-app": {
+      "anchor": "head/apps/tv/src/main/kotlin/fast/tv/Player.kt#L3",
+      "evidence": "class Player(",
+      "title": "TV app player"
+    },
+    "gateway": {
+      "anchor": "head/platform/gateway/play.go#L9-L12",
+      "evidence": "func (s *Server) Routes(",
+      "title": "Gateway routes"
+    },
+    "playback": {
+      "anchor": "head/services/playback/manifest.go#L3-L5",
+      "evidence": "func (s *Service) Manifest(",
+      "title": "Playback manifest service"
+    },
+    "drm": {
+      "anchor": "head/services/drm/licence.go#L3-L4",
+      "evidence": "func (s *Service) Licence(",
+      "title": "DRM licence service"
+    },
+    "catalog": {
+      "anchor": "head/services/catalog/src/routes.ts#L6",
+      "evidence": "export const routes = Router();",
+      "title": "Catalog API router"
+    },
+    "search": {
+      "anchor": "head/services/search/rank.go#L3-L4",
+      "evidence": "func (p *Plugin) Boosts(",
+      "title": "Search ranking plugin"
+    },
+    "transcoder": {
+      "anchor": "head/services/transcoder/job.go#L5-L6",
+      "evidence": "func (j *Job) Run(",
+      "title": "Transcode job"
+    },
+    "segments": {
+      "anchor": "head/infra/storage.tf#L2-L4",
+      "evidence": "resource \"aws_s3_bucket\" \"segments\"",
+      "title": "Segments bucket"
+    },
+    "accounts": {
+      "anchor": "head/db/accounts/schema.sql#L2-L7",
+      "evidence": "CREATE TABLE accounts",
+      "title": "Accounts table"
+    },
+    "events": {
+      "anchor": "head/infra/topics.tf#L2-L5",
+      "evidence": "name       = \"video.ready\"",
+      "title": "video.ready topic"
+    },
+    "web-search-call": {
+      "anchor": "head/apps/web/src/api.ts#L8-L10",
+      "evidence": "fetch(`${BASE}/search",
+      "title": "Web app calls search"
+    },
+    "tv-play-call": {
+      "anchor": "head/apps/tv/src/main/kotlin/fast/tv/Player.kt#L6-L7",
+      "evidence": "api.get<PlaybackResponse>(\"/api/play/$episodeId\")",
+      "title": "TV app requests playback"
+    },
+    "gateway-manifest": {
+      "anchor": "head/platform/gateway/play.go#L21",
+      "evidence": "s.playback.Manifest(ctx, id)",
+      "title": "Gateway asks Playback for the manifest"
+    },
+    "gateway-title": {
+      "anchor": "head/platform/gateway/play.go#L22",
+      "evidence": "s.catalog.Title(ctx, id)",
+      "title": "Gateway asks Catalog for the title"
+    },
+    "gateway-search": {
+      "anchor": "head/platform/gateway/play.go#L32",
+      "evidence": "s.catalog.Search(r.Context()",
+      "title": "Gateway forwards search to Catalog"
+    },
+    "playback-licence": {
+      "anchor": "head/services/playback/manifest.go#L8-L11",
+      "evidence": "s.drm.Licence(ctx, viewer, episode)",
+      "title": "Playback asks DRM for a licence"
+    },
+    "drm-plan-query": {
+      "anchor": "head/services/drm/licence.go#L6",
+      "evidence": "SELECT plan FROM accounts WHERE id = $1",
+      "title": "DRM reads the viewer's plan"
+    },
+    "catalog-elastic": {
+      "anchor": "head/services/catalog/src/search.ts#L5-L8",
+      "evidence": "index: \"titles\"",
+      "title": "Catalog queries Search"
+    },
+    "search-history": {
+      "anchor": "head/services/search/rank.go#L5",
+      "evidence": "\"history:\"+viewer",
+      "title": "Search reads viewing history"
+    },
+    "transcoder-put": {
+      "anchor": "head/services/transcoder/job.go#L13-L15",
+      "evidence": "j.s3.PutObject(",
+      "title": "Transcoder writes segments"
+    },
+    "segments-notify": {
+      "anchor": "head/infra/storage.tf#L5-L9",
+      "evidence": "filter_suffix = \"manifest.m3u8\"",
+      "title": "A new manifest announces the title"
+    }
+  }
+}

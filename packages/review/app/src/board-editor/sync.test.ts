@@ -185,6 +185,36 @@ describe("another author's version", () => {
     expect(lines(server)).toContain("First line. Mine.");
   });
 
+  test("takes their change to the block the caret was left in, once the editor lost focus", async () => {
+    // The server holds a block only while the editor has focus, so it
+    // lets another author change the block a caret was merely left in.
+    const { e, sync, server, settle } = open();
+
+    sync.tell({ focused: true });
+    e.caret("Second");
+    sync.tell({ focused: false });
+    sync.tell({
+      version: server.author((board) => {
+        board.document[1]!.markdown = "Theirs.";
+      }),
+    });
+    await settle();
+
+    expect(e.state.doc.textContent).toContain("Theirs.");
+    expect(e.state.doc.textContent).not.toContain("Second line.");
+
+    // And the next one too: the block is not taken for unsaved typing.
+    sync.tell({
+      version: server.author((board) => {
+        board.document[1]!.markdown = "Theirs again.";
+      }),
+    });
+    await settle();
+
+    expect(e.state.doc.textContent).toContain("Theirs again.");
+    expect(lines(server)).toEqual(["First line.", "Theirs again."]);
+  });
+
   test("never renames over a title the person is typing", async () => {
     const { e, sync, server, settle } = open();
 

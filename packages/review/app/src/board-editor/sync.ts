@@ -426,11 +426,16 @@ class Sync implements BoardSync {
     this.incoming = undefined;
     const state = this.state();
 
+    // The block kept against their version is the one the server holds for
+    // the person: the caret's, only while the editor has focus. A caret
+    // merely left in a block holds nothing, so the server takes another
+    // author's change to it, and so must the editor; kept, it would differ
+    // from every later version and pass for unsaved typing.
     const tr = applyVersion(
       state,
       this.base,
       next,
-      this.closedState ? null : focusedBlock(state),
+      this.closedState || !this.focused ? null : focusedBlock(state),
     );
 
     if (tr) this.dispatch(tr);

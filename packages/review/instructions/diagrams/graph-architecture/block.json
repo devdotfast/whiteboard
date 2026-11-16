@@ -1,0 +1,26 @@
+{
+  "title": "A rate-limited API",
+  "description": "A gateway asks a limiter before each call. With a token the call reaches the orders service; with none the gateway answers 429 itself and the service is left alone.",
+  "code": {
+    "gateway": {
+      "source": "head/gateway/server.go#L30-L64",
+      "label": "Handle a call"
+    },
+    "take": {
+      "source": "head/gateway/limit.go#L12-L40",
+      "label": "Take a token"
+    },
+    "forward": {
+      "source": "head/gateway/server.go#L52",
+      "label": "Forward the call"
+    },
+    "list-orders": {
+      "source": "head/orders/list.go#L18-L46",
+      "label": "List orders"
+    },
+    "query": {
+      "source": "head/orders/list.go#L27",
+      "label": "Query the orders"
+    }
+  }
+}

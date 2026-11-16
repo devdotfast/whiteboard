@@ -1,0 +1,30 @@
+<style>
+  .scene {
+    position: relative;
+    font-size: 13px;
+    color: var(--wb-ink);
+  }
+  .scene canvas {
+    display: block;
+  }
+  .result {
+    position: absolute;
+    top: 24px;
+    right: 28px;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    opacity: 0;
+  }
+  .result b {
+    font-size: 34px;
+    line-height: 1;
+    font-weight: 700;
+  }
+  .result span {
+    color: var(--wb-muted);
+  }
+</style>
+<div class="scene">
+  <div class="result"><span>Rolled a</span><b>5</b></div>
+</div>

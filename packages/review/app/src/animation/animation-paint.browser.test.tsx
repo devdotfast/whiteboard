@@ -144,7 +144,7 @@ let seq = 0;
 
 const insert = (
   id: string,
-  kind: "markdown" | "animation" | "clip",
+  kind: "markdown" | "animation" | "clip" | "diagram",
 ): AuthoringCursor => ({
   targetId: id,
   blockId: id,
@@ -199,6 +199,32 @@ it("keeps a streamed animation unseen until the queue reaches it, then paints it
 
   // The stage paints and reports it before the cap.
   await waitFor(() => expect(shown("Lead note")).toBe(true));
+  await waitFor(() => expect(motion()).toBeUndefined());
+});
+
+it("paints a streamed diagram in while what it draws runs transitions of its own", async () => {
+  // The log's row fades back and forth all through the stage's own fade in,
+  // so its transitions end first and bubble up to the stage's root.
+  const diagram = documentSchema.parse([
+    {
+      id: "anim",
+      type: "diagram",
+      title: "Busy",
+      html: '<style>p { transition: opacity 40ms; }</style><p id="row">Row</p>',
+      script: `
+        const row = document.querySelector("#row");
+        setInterval(() => (row.style.opacity = row.style.opacity === "0.5" ? "1" : "0.5"), 60);
+      `,
+    },
+  ])[0]!;
+
+  await render(insert("b1", "markdown"), [before, note, late]);
+  await render(insert("anim", "diagram"), [before, diagram, note, late]);
+  expect(motion()).toBe("queued");
+  await manualClock.advance(680);
+  expect(motion()).toBe("painting");
+
+  // The stage reports it painted, so the queue moves on before its cap.
   await waitFor(() => expect(motion()).toBeUndefined());
 });
 

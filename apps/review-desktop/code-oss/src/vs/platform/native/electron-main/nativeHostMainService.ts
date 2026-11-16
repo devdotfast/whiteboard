@@ -27,7 +27,7 @@ import { IEnvironmentMainService } from '../../environment/electron-main/environ
 import { createDecorator, IInstantiationService } from '../../instantiation/common/instantiation.js';
 import { ILifecycleMainService, IRelaunchOptions } from '../../lifecycle/electron-main/lifecycleMainService.js';
 import { ILogService } from '../../log/common/log.js';
-import { FocusMode, ICommonNativeHostService, INativeHostOptions, INativeSystemWideKeybinding, INativeSystemWideKeybindingResult, IOSProperties, IOSStatistics, IStartTracingOptions, IToastOptions, IToastResult, IUninstallShellCommandOptions, PowerSaveBlockerType, SystemIdleState, ThermalState, IScreenshotOptions } from '../common/native.js';
+import { FocusMode, ICommonNativeHostService, INativeHostOptions, INativeSystemWideKeybinding, INativeSystemWideKeybindingResult, IOSProperties, IOSStatistics, IStartTracingOptions, IToastOptions, IToastResult, IUninstallShellCommandOptions, PowerSaveBlockerType, SystemIdleState, ThermalState, IScreenshotOptions, IHiddenPageRender, IHiddenPageResult } from '../common/native.js';
 import { IGlobalKeybindingsMainService } from '../../globalKeybindings/electron-main/globalKeybindingsMainService.js';
 import { IProductService } from '../../product/common/productService.js';
 import { IPartsSplash } from '../../theme/common/themeService.js';
@@ -35,6 +35,7 @@ import { IThemeMainService } from '../../theme/electron-main/themeMainService.js
 import { defaultWindowState, ICodeWindow } from '../../window/electron-main/window.js';
 import { IColorScheme, IOpenedAuxiliaryWindow, IOpenedMainWindow, IOpenEmptyWindowOptions, IOpenWindowOptions, IPoint, IRectangle, IWindowOpenable } from '../../window/common/window.js';
 import { defaultBrowserWindowOptions, IWindowsMainService, OpenContext } from '../../windows/electron-main/windows.js';
+import { HiddenPageRenderer } from './hiddenPageRenderer.js';
 import { isWorkspaceIdentifier, toWorkspaceIdentifier } from '../../workspace/common/workspace.js';
 import { IWorkspacesManagementMainService } from '../../workspaces/electron-main/workspacesManagementMainService.js';
 import { VSBuffer } from '../../../base/common/buffer.js';
@@ -925,6 +926,14 @@ export class NativeHostMainService extends Disposable implements INativeHostMain
 		}
 
 		return VSBuffer.wrap(options?.format === 'png' ? image.toPNG() : image.toJPEG(95));
+	}
+
+	private hiddenPages: HiddenPageRenderer | undefined;
+
+	async renderHiddenPage(_windowId: number | undefined, options: IHiddenPageRender): Promise<IHiddenPageResult> {
+		this.hiddenPages ??= new HiddenPageRenderer();
+
+		return this.hiddenPages.render(options);
 	}
 
 	//#endregion

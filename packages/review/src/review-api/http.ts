@@ -26,9 +26,12 @@ import {
   ReviewInputError,
   type ReviewTarget,
   type UncategorizedReport,
+  applyEdit,
   boardRepositoryId,
+  editSchema,
   elements,
   lensReport,
+  respellEditLinks,
   scopedCoverage,
   uncategorizedReport,
 } from "@dev.fast/whiteboard-document";
@@ -72,10 +75,16 @@ import * as z from "zod";
 
 import { anchorQuotes } from "./anchor-quotes.js";
 import {
+  RENDER_ALL,
   type RenderAnimation,
+  type RenderedFrame,
+  draftRenderSchema,
   renderQuerySchema,
+  renderSnapshot,
+  renderStops,
   renderTarget,
 } from "./animation-render.js";
+import type { AnimationRun } from "./animation-runs.js";
 import type { AskRecord } from "./ask-history.js";
 import { authoringTools } from "./authoring-tools.js";
 import { documentText } from "./document-text.js";
@@ -93,6 +102,7 @@ import {
   type ReviewRequestVia,
   reviewRequestOrigin,
 } from "./request-origin.js";
+import { refuseRetiredBlocks } from "./retired-blocks.js";
 import {
   legacyModeSchema,
   progressUpdateSchema,
@@ -2097,30 +2107,151 @@ export function createReviewApi(
             },
     );
   });
-  // One frame of an animation (or a clip at a marker) as the reader sees it:
-  // the attached Desktop shows it on the open board and captures it.
-  app.get("/:id/render", async (context) => {
-    const query = renderQuerySchema.parse(context.req.query());
-    const id = context.req.param("id");
-    const target = renderTarget(readReview(id), query.targetId, query.frame);
 
+  /** One stop, or every stop, of a block as the reader sees it. The block
+   * need not be on the saved board: `review` is the board to draw it from. */
+  const renderBlock = async (
+    id: string,
+    review: Snapshot,
+    targetId: string,
+    frame: string | undefined,
+    run?: AnimationRun,
+  ) => {
     if (!render)
       throw new ReviewInputError(
         "Rendering a frame needs Whiteboard Desktop, which this server cannot reach.",
         409,
       );
 
+    const snapshot = renderSnapshot(review, targetId);
+
+    // A render that ran the block itself says what it found on each stop;
+    // otherwise the open board's last run does.
+    const reported = (frames: RenderedFrame[]) => {
+      const found = frames.some((item) => item.findings)
+        ? [...new Set(frames.flatMap((item) => item.findings ?? []))]
+        : run?.findings;
+
+      const notes = [...new Set(frames.flatMap((item) => item.notes ?? []))];
+
+      return {
+        ...((found || run) && { findings: found ?? [] }),
+        ...(notes.length && { notes }),
+        ...(run?.claims && { claims: run.claims }),
+      };
+    };
+
+    const shown = ({ findings: _, notes: __, ...item }: RenderedFrame) => item;
+
+    // Every stop in turn, so the findings cover every step.
+    if (frame === RENDER_ALL) {
+      const { type, stops } = renderStops(review, targetId);
+      const frames = [];
+
+      for (const stop of stops)
+        frames.push(
+          await render({
+            reviewId: id,
+            targetId,
+            frame: stop.scenario ? `${stop.scenario}:${stop.key}` : stop.key,
+            snapshot,
+          }),
+        );
+
+      return {
+        reviewId: id,
+        targetId,
+        type,
+        frames: frames.map(shown),
+        ...reported(frames),
+      };
+    }
+
+    const target = renderTarget(review, targetId, frame);
+
     const rendered = await render({
       reviewId: id,
-      targetId: query.targetId,
+      targetId,
       frame: target.key,
+      snapshot,
     });
 
-    return context.json({
+    return {
       reviewId: id,
-      targetId: query.targetId,
+      targetId,
       type: target.type,
-      ...rendered,
+      ...shown(rendered),
+      ...reported([rendered]),
+    };
+  };
+
+  // One frame of an animation (or a clip at a marker) as the reader sees it:
+  // Desktop draws the block alone, out of sight, and captures it.
+  app.get("/:id/render", async (context) => {
+    const query = renderQuerySchema.parse(context.req.query());
+    const id = context.req.param("id");
+    const review = readReview(id);
+
+    const block = elements(review.document).find(
+      (element) => element.id === query.targetId,
+    );
+
+    return context.json(
+      await renderBlock(
+        id,
+        review,
+        query.targetId,
+        query.frame,
+        // A diagram's canvas reports what its stage found drawn wrong and
+        // how its claims stand when it runs; the render passes the latest on.
+        block?.type === "diagram"
+          ? store.animationRunsOf(id).get(query.targetId)
+          : undefined,
+      ),
+    );
+  });
+  // The same for a block that is not on the board yet: it is checked as an
+  // insert would be and drawn from a copy of the board, and nothing is saved.
+  app.post("/:id/render", async (context) => {
+    const body = draftRenderSchema.parse(
+      await readBoundedRequestJson(context.req.raw),
+    );
+
+    const id = context.req.param("id");
+
+    if (!animationsEnabled())
+      throw new ReviewInputError(
+        "Animation authoring is disabled. Enable Animations in Settings under Experimental Features to render diagrams, animations and clips.",
+        409,
+      );
+
+    const saved = readReview(id);
+    const review = structuredClone(saved);
+    let drafts = 0;
+
+    const applied = applyEdit(
+      review.document,
+      respellEditLinks(
+        editSchema.parse({ type: "insert", content: body.content }),
+      ),
+      (prefix) => `${prefix}-draft-${++drafts}`,
+    );
+
+    const result = await renderBlock(id, review, applied.targetId, body.frame);
+
+    if (!data) return context.json({ ...result, draft: true });
+
+    const { quotes, unquoted } = await anchorQuotes(
+      saved,
+      review,
+      async (pins, side, file) => (await data.file(pins, side, file)).text,
+    );
+
+    return context.json({
+      ...result,
+      draft: true,
+      ...(quotes.length && { quotes }),
+      ...(unquoted && { unquotedAnchors: unquoted }),
     });
   });
   app.get("/:id", async (context) => {
@@ -2209,14 +2340,14 @@ export function createReviewApi(
           : undefined;
 
       const animated = (type: string | undefined) =>
-        type === "animation" || type === "clip";
+        type === "animation" || type === "clip" || type === "diagram";
 
       if (
         incoming.some((element) => animated(element.type)) ||
         animated(target?.type)
       )
         throw new ReviewInputError(
-          "Animation authoring is disabled. Enable Animations in Settings under Experimental Features to edit animations and clips. Existing ones can still be viewed.",
+          "Diagram and animation authoring is disabled. Enable Diagrams and Animations in Settings under Experimental Features to edit diagrams, animations and clips. Existing ones can still be viewed.",
           409,
         );
     }
@@ -2236,6 +2367,15 @@ export function createReviewApi(
             kind: "agent",
             ...(threadId && { threadId }),
           };
+
+    if (input.operation.type === "edit") {
+      const { edit, reviewId } = input.operation;
+      const snapshot = readReview(reviewId);
+
+      // With diagrams on, agents draw them instead of the kinds they replace.
+      if (author.kind === "agent" && animationsEnabled())
+        refuseRetiredBlocks(edit, snapshot.document);
+    }
 
     // A link's kept commits go when its last copy is deleted for good.
     const copy =

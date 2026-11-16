@@ -577,12 +577,12 @@ export function SettingsPage({
 
             <Section label="Experimental Features">
               <Row
-                label="Animations"
-                description="Let agents create and edit animations through MCP. Existing animations remain visible when off."
+                label="Diagrams and Animations"
+                description="Let agents draw diagrams, animations and clips through MCP. Agents then draw a diagram in place of a sequence, flow diagram or call stack. Existing ones remain visible when off."
               >
                 <label {...stylex.props(styles.toggle)}>
                   <Checkbox
-                    aria-label="Animations"
+                    aria-label="Diagrams and Animations"
                     checked={animationsEnabled}
                     onChange={(event) => {
                       const enabled = event.target.checked;

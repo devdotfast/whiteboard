@@ -36,7 +36,8 @@
     ".pi/**",
     ".roo/**",
     ".windsurf/**",
-    "tools/oxlint/anti-slop/**"
+    "tools/oxlint/anti-slop/**",
+    "packages/review/app/vendor/**"
   ],
   "rules": {
     "sort-imports": [

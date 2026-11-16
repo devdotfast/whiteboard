@@ -1,0 +1,28 @@
+[
+  {
+    "key": "checkout",
+    "title": "Checkout",
+    "label": "CHECKOUT",
+    "caption": "The shopper checks out and the order waits for payment.",
+    "moves": [{ "from": "cart", "to": "pending", "label": "order" }]
+  },
+  {
+    "key": "declined",
+    "title": "Card declined",
+    "label": "DECLINED",
+    "caption": "The card is declined, so the order goes back to the cart.",
+    "moves": [
+      { "from": "pending", "to": "cart", "label": "402", "failed": true }
+    ]
+  },
+  {
+    "key": "ship",
+    "title": "Ship",
+    "label": "SHIP",
+    "caption": "A paid order is packed and handed to the carrier.",
+    "moves": [
+      { "from": "paid", "to": "packed" },
+      { "from": "packed", "to": "shipped", "delay": 700 }
+    ]
+  }
+]

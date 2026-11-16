@@ -200,3 +200,7 @@ it("offers a shorter outline, complete target reads, and rejects missing IDs", (
   expect(() => documentText(snapshot, "missing")).toThrow("Target not found");
   expect(documentText({ ...snapshot, document: [] })).toContain("Empty review");
 });
+
+it("names the commits a board's code links resolve against", () => {
+  expect(documentText(snapshot)).toContain("Base before · head after");
+});

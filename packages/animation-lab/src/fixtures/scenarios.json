@@ -1,0 +1,46 @@
+{
+  "title": "Read an order",
+  "description": "Pick a scenario to see which services the read touches.",
+  "stage": {
+    "width": 640,
+    "height": 320
+  },
+  "script": "import { createElement as h, useEffect } from \"react\";\nimport { createRoot } from \"react-dom/client\";\nimport { ReactFlow, useEdgesState, useNodesState } from \"@xyflow/react\";\n\nconst services = [\n  { id: \"client\", position: { x: 30, y: 130 }, data: { label: \"Client\" } },\n  { id: \"cache\", position: { x: 240, y: 130 }, data: { label: \"Cache\" } },\n  { id: \"db\", position: { x: 450, y: 60 }, data: { label: \"Database\" } },\n  { id: \"replica\", position: { x: 450, y: 210 }, data: { label: \"Read replica\" } },\n].map((node) => ({ ...node, sourcePosition: \"right\", targetPosition: \"left\" }));\n\n// The scenario names the hops the request takes.\nconst hops = (path) =>\n  path.slice(1).map((to, i) => ({ id: path[i] + \"-\" + to, source: path[i], target: to, animated: true }));\n\nconst dim = (path) => (node) => ({ ...node, style: path.includes(node.id) ? undefined : { opacity: 0.35 } });\n\ndocument.body.style.cssText = \"height:100%;font:13px system-ui\";\nconst root = document.createElement(\"div\");\nroot.style.cssText = \"height:100%\";\ndocument.body.append(root);\nconst bounds = [[0, 0], [root.clientWidth, root.clientHeight]];\n\nfunction Read() {\n  const [nodes, setNodes, onNodesChange] = useNodesState(services);\n  const [edges, setEdges, onEdgesChange] = useEdgesState([]);\n\n  // Positions survive a new scenario; only the path changes.\n  useEffect(\n    () =>\n      wb.onScenario(({ data: { path } }) => {\n        setNodes((current) => current.map(dim(path)));\n        setEdges(hops(path));\n      }),\n    [],\n  );\n\n  return h(ReactFlow, {\n    nodes,\n    edges,\n    onNodesChange,\n    onEdgesChange,\n    nodeExtent: bounds,\n    translateExtent: bounds,\n    minZoom: 1,\n    maxZoom: 1,\n    proOptions: { hideAttribution: true },\n  });\n}\n\ncreateRoot(root).render(h(Read));\n",
+  "scenarios": [
+    {
+      "id": "hit",
+      "label": "Cache hit",
+      "data": {
+        "path": ["client", "cache"]
+      }
+    },
+    {
+      "id": "miss",
+      "label": "Cache miss",
+      "data": {
+        "path": ["client", "cache", "db"]
+      }
+    },
+    {
+      "id": "replica",
+      "label": "Miss, served by a replica",
+      "data": {
+        "path": ["client", "cache", "replica"]
+      }
+    },
+    {
+      "id": "down",
+      "label": "Cache down",
+      "data": {
+        "path": ["client", "db"]
+      }
+    },
+    {
+      "id": "cold",
+      "label": "Cold start after a deploy, cache empty",
+      "data": {
+        "path": ["client", "cache", "db"]
+      }
+    }
+  ]
+}

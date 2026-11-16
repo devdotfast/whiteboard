@@ -8,6 +8,8 @@ import { openChildWhiteboard } from "../../reviewChildWhiteboard.js";
 import { reviewBottomScrollPadding } from "../../reviewScrollPadding.js";
 import { getZoomFactor } from "../../../../base/browser/browser.js";
 import { $, addDisposableListener, getWindow, type Dimension } from "../../../../base/browser/dom.js";
+import { hash } from "../../../../base/common/hash.js";
+import { FileAccess } from "../../../../base/common/network.js";
 import { encodeBase64 } from "../../../../base/common/buffer.js";
 import { mainWindow } from "../../../../base/browser/window.js";
 import type { IHoverOptions, IHoverWidget } from "../../../../base/browser/ui/hover/hover.js";
@@ -167,6 +169,10 @@ const requestReviewApi: typeof fetch = (url, init) => fetch(url, init);
 
 /** The longest edge of a rendered frame's PNG: a retina capture of a column-wide block, which agents read whole. */
 const RENDER_MAX_EDGE = 1600;
+
+/** A render out of sight shows the block at a reader's column width, and whole however tall. */
+const RENDER_PAGE_WIDTH = 860;
+const RENDER_MAX_EDGE_OUT_OF_SIGHT = 3200;
 
 /** How long a render waits for a board that is still opening. */
 const RENDER_READY_WAIT_MS = 10_000;
@@ -1525,7 +1531,10 @@ export class ReviewCanvasEditorPane extends EditorPane {
 	 * Only the board open in this part can be rendered; the canvas measures
 	 * CSS pixels, which the window's zoom scales to the capture's pixels.
 	 */
-	private async renderAnimation(args: { reviewId: string; targetId: string; frame: string }): Promise<ReviewVerbResponse> {
+	private async renderAnimation(args: { reviewId: string; targetId: string; frame: string; snapshot?: unknown }): Promise<ReviewVerbResponse> {
+		if (args.snapshot !== undefined) {
+			return this.renderOutOfSight(args.targetId, args.frame, args.snapshot);
+		}
 		if (this.apiContent?.reviewId !== args.reviewId) {
 			return { ok: false, error: "The whiteboard is not open in Desktop. Open it with session_open, then render again." };
 		}
@@ -1552,6 +1561,33 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				throw new Error("Desktop could not capture its window; it must be visible on screen.");
 			}
 			return { ok: true, result: { ...shown, png: encodeBase64(png) } };
+		} catch (error) {
+			return { ok: false, error: error instanceof Error ? error.message : String(error) };
+		}
+	}
+
+	/**
+	 * The same look without touching this window: the block alone on a page
+	 * in a window that is never shown, as tall as the block needs. The board
+	 * need not be open.
+	 */
+	private async renderOutOfSight(targetId: string, frame: string, snapshot: unknown): Promise<ReviewVerbResponse> {
+		try {
+			const theme = this.colorScheme();
+			const input = JSON.stringify({ snapshot, theme });
+			const rendered = await this.hostService.renderHiddenPage({
+				// A page is for one version of one block in one theme.
+				key: `${hash(input)}`,
+				url: FileAccess.asBrowserUri("vs/review/canvas/render.html").toString(true),
+				width: RENDER_PAGE_WIDTH,
+				maxEdge: RENDER_MAX_EDGE_OUT_OF_SIGHT,
+				setup: `globalThis.reviewRender.mount(${input})`,
+				step: `globalThis.reviewRender.show(${JSON.stringify(targetId)}, ${JSON.stringify(frame)})`,
+			});
+			if (!rendered.png) {
+				throw new Error("Desktop could not capture the block.");
+			}
+			return { ok: true, result: { ...(rendered.value as object), png: rendered.png } };
 		} catch (error) {
 			return { ok: false, error: error instanceof Error ? error.message : String(error) };
 		}

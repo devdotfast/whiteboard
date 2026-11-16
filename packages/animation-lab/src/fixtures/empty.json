@@ -1,0 +1,9 @@
+{
+  "title": "Hello",
+  "description": "The script calls wb.helloWorld() ten times, one second apart.",
+  "stage": {
+    "width": 640,
+    "height": 320
+  },
+  "script": "for (let i = 0; i < 10; i++) {\n  setTimeout(() => wb.helloWorld(), i * 1000);\n}"
+}
