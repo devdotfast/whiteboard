@@ -2068,14 +2068,17 @@ export const ReviewVerbRequestSchema = z.discriminatedUnion("name", [
       version: z.number().int().nonnegative().optional(),
     }),
   }),
-  /** Show one frame of an animation (or a clip at one marker) on the open
-   * board and capture it; answers a `ReviewRenderedFrame` with its `png`. */
+  /** Show one frame of an animation (or a clip at one marker) and capture
+   * it; answers a `ReviewRenderedFrame` with its `png`. With `snapshot`, the
+   * board holding only that block, Desktop renders it out of sight; without,
+   * on the open board. */
   z.strictObject({
     name: z.literal("renderAnimation"),
     args: z.strictObject({
       reviewId: apiReviewIdSchema,
       targetId: requiredString,
       frame: requiredString,
+      snapshot: z.json().optional(),
     }),
   }),
 ]);

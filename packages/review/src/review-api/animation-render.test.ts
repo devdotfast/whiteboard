@@ -244,8 +244,17 @@ describe("GET /:id/render", () => {
         error: null,
         png: PNG,
       });
+      // Desktop gets the block alone on its board, to render out of sight.
       expect(requests).toEqual([
-        { reviewId, targetId: animationId, frame: "a2" },
+        {
+          reviewId,
+          targetId: animationId,
+          frame: "a2",
+          snapshot: expect.objectContaining({
+            reviewId,
+            document: [expect.objectContaining({ id: animationId })],
+          }),
+        },
       ]);
 
       // Desktop is not asked for a stop the block does not have.
@@ -344,6 +353,81 @@ describe("GET /:id/render", () => {
   });
 });
 
+describe("POST /:id/render", () => {
+  it("draws a block that is not on the board, and saves nothing", async () => {
+    const store = openStore();
+    const requests: RenderRequest[] = [];
+
+    const app = createReviewApi(
+      store,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      () => true,
+      async (request) => {
+        requests.push(request);
+
+        return {
+          frame: { key: request.frame, title: "Ask", position: 0, count: 2 },
+          clipped: false,
+          error: null,
+          png: PNG,
+        };
+      },
+    );
+
+    try {
+      const { reviewId } = await board(store);
+      const before = store.read(reviewId);
+
+      const post = (content: typeof stepped) =>
+        app.request(`/${reviewId}/render`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ content, frame: "answer" }),
+        });
+
+      const rendered = await post({ ...stepped, title: "A draft" });
+
+      expect(rendered.status).toBe(200);
+
+      const { targetId, ...result } = await rendered.json();
+
+      expect(result).toMatchObject({
+        draft: true,
+        type: "diagram",
+        frame: { key: "answer" },
+        png: PNG,
+      });
+      // Desktop gets the draft alone on a copy of the board.
+      expect(requests).toEqual([
+        {
+          reviewId,
+          targetId,
+          frame: "answer",
+          snapshot: expect.objectContaining({
+            document: [
+              expect.objectContaining({ id: targetId, title: "A draft" }),
+            ],
+          }),
+        },
+      ]);
+      expect(store.read(reviewId)).toEqual(before);
+
+      // A draft is checked as an insert is.
+      expect((await post({ ...stepped, frames: [] })).status).toBe(400);
+      expect(requests).toHaveLength(1);
+    } finally {
+      store.close();
+    }
+  });
+});
+
 describe("session_render", () => {
   it("is listed with animation authoring, writes the PNG beside the drafts, and hands the image to the agent", async () => {
     const store = openStore();
@@ -387,9 +471,6 @@ describe("session_render", () => {
       const tool = (await catalog()).find(
         (tool) => tool.name === "session_render",
       )!;
-
-      expect(tool.description).toContain("session_open");
-      expect(tool.inputSchema.required).toEqual(["sessionId", "targetId"]);
 
       const result = await callPublicTool(client, tool, {
         sessionId: reviewId,

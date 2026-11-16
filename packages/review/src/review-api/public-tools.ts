@@ -15,6 +15,7 @@ import {
   type ReadBlock,
   checkoutAnimation,
   diagramReferenceText,
+  readAnimationFolder,
   recordPublish,
   resolveDraftEdit,
   stageReferenceText,
@@ -165,6 +166,37 @@ export async function callPublicTool(
       sessionId,
       targetId,
       isStringValue(dir) ? dir : undefined,
+    );
+  }
+
+  if (tool.name === "session_render" && "fromFiles" in rest) {
+    const { fromFiles, targetId, frame } = rest;
+
+    if (!isStringValue(sessionId) || !isStringValue(fromFiles) || !fromFiles)
+      throw new ReviewInputError("sessionId and fromFiles are required.");
+
+    if (targetId !== undefined && targetId !== null)
+      throw new ReviewInputError(
+        "Give fromFiles to render a draft or targetId to render a published block, not both.",
+      );
+
+    const directory = path.resolve(fromFiles);
+
+    // The folder is read and checked here, beside the agent, as a publish's
+    // is; the host draws what it holds and saves nothing.
+    const drawn = await client.post<JsonValue>(
+      `/${encodeURIComponent(sessionId)}/render`,
+      {
+        content: await readAnimationFolder(directory),
+        ...(isStringValue(frame) && { frame }),
+      },
+      signal,
+    );
+
+    return saveRenderedFrame(
+      withoutRepositoryIds(publicResult(drawn)),
+      sessionId,
+      `draft-${path.basename(directory)}`,
     );
   }
 

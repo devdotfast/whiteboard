@@ -52,6 +52,8 @@ import { tokens } from "./tokens.stylex";
 import { UpdateChip } from "./update-chip";
 import { Whiteboard, preloadBoardEditor } from "./whiteboard";
 
+export { reviewRenderPage } from "./render-page";
+
 import "./styles.css";
 
 void preloadBoardEditor();

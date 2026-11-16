@@ -3,12 +3,17 @@ A `diagram` draws a system on the whiteboard: its parts, what joins them, and a 
 ## Work in files
 
 1. Write a folder: `diagram.html`, and `block.json` (`title`, `description`, `code`). For steps, add `frames.json` and, for paths the reader picks between, `scenarios.json`.
-2. Publish it with `session_edit` and `{ type: "insert", fromFiles: "<folder>", afterId }`. Publishing writes `checkout.json` into the folder: keep editing there and publish changes with `{ type: "update", targetId, fromFiles }`. `session_checkout` writes a folder for a diagram you have none for.
-3. Render it with `session_render({ sessionId, targetId, frame: "all" })` and look at every PNG. Check the drawing says what you meant, then read the rest of the result:
-   - `error`: the script threw. Fix it.
-   - `findings`: something is drawn wrong, such as an overlap, cut-off text or a move with no edge. Fix each one.
-   - `notes`: a choice the stage made, such as turning a graph that was too wide. There is nothing to fix. Change the diagram only if you want a different result.
-   - `claims`: how the code links stand. See Link the code.
+2. Render the folder with `session_render({ sessionId, fromFiles: "<folder>", frame: "all" })` and look at every PNG. Nothing is on the whiteboard yet, and the reader sees nothing. Render again after each change, until it is right.
+3. Publish it once, with `session_edit` and `{ type: "insert", fromFiles: "<folder>", afterId }`. Publishing writes `checkout.json` into the folder: to change the diagram later, edit there, render the folder, and publish with `{ type: "update", targetId, fromFiles }`. `session_checkout` writes a folder for a diagram you have none for.
+4. For a diagram that links code, render it once more by `targetId`: only that render returns `claims`.
+
+On every render, check the drawing says what you meant, then read the rest of the result:
+
+- `error`: the script threw. Fix it.
+- `findings`: something is drawn wrong, such as an overlap, cut-off text or a move with no edge. Fix each one.
+- `notes`: a choice the stage made, such as turning a graph that was too wide. There is nothing to fix. Change the diagram only if you want a different result.
+- `quotes`: the first and last line of each code range. Check they are the lines you meant.
+- `claims`: how the code links stand. See Link the code.
 
 ## Markup
 
@@ -29,15 +34,15 @@ Rules:
 
 Read the reference before you start; its path is under References.
 
-| The diagram is | Write | Reference |
-| --- | --- | --- |
-| An architecture, a pipeline, or anything that branches or nests | One `<wb-graph>`: a group for each tier, owner or stage, nodes inside them, then the edges | `graph-architecture` |
-| A state machine | One `<wb-graph>`: a node for each state and a labelled edge for each transition, back edges included | `graph-order-states` |
-| The same, with state that changes by step | A `<wb-panel>` inside the graph, and a `data` object on each frame with the rows' keys | `graph-architecture` |
-| Calls between a few participants, in order | `diagram.js`: the participants as nodes in one row, and a frame for each call or reply | `sequence` |
-| Timing the reader plays and scrubs | `diagram.js` and a `timeline` of chapters in `block.json`, in place of frames | `played-request` |
-| A chart | `diagram.js` with `wb.chart`, which takes Observable Plot options | `latency-chart` |
-| Something physical or spatial | `diagram.js` with `await wb.three()`, which gives you three.js | `rolled-die` |
+| The diagram is                                                  | Write                                                                                                | Reference            |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | -------------------- |
+| An architecture, a pipeline, or anything that branches or nests | One `<wb-graph>`: a group for each tier, owner or stage, nodes inside them, then the edges           | `graph-architecture` |
+| A state machine                                                 | One `<wb-graph>`: a node for each state and a labelled edge for each transition, back edges included | `graph-order-states` |
+| The same, with state that changes by step                       | A `<wb-panel>` inside the graph, and a `data` object on each frame with the rows' keys               | `graph-architecture` |
+| Calls between a few participants, in order                      | `diagram.js`: the participants as nodes in one row, and a frame for each call or reply               | `sequence`           |
+| Timing the reader plays and scrubs                              | `diagram.js` and a `timeline` of chapters in `block.json`, in place of frames                        | `played-request`     |
+| A chart                                                         | `diagram.js` with `wb.chart`, which takes Observable Plot options                                    | `latency-chart`      |
+| Something physical or spatial                                   | `diagram.js` with `await wb.three()`, which gives you three.js                                       | `rolled-die`         |
 
 Read `wb.d.ts` (its path is under References) before writing a `diagram.js`.
 

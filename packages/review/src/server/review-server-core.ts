@@ -295,11 +295,19 @@ export function relayReviewCallbacks(
           409,
         );
 
-      const { reviewId, targetId, frame } = request;
+      const { reviewId, targetId, frame, snapshot } = request;
 
       const result = await relay.dispatch({
         name: "renderAnimation",
-        args: { reviewId, targetId, frame },
+        args: {
+          reviewId,
+          targetId,
+          frame,
+          // As it crosses to Desktop: plain JSON.
+          ...(snapshot && {
+            snapshot: z.json().parse(JSON.parse(JSON.stringify(snapshot))),
+          }),
+        },
       });
 
       if (!result.ok) throw new ReviewInputError(result.error, 409);

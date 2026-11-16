@@ -184,8 +184,13 @@ export function authoringTools(
           ),
           tool(
             "render",
-            "See a diagram, animation or clip as the reader does: Desktop shows one of its frames (frame: a frame key, a clip's marker key or a diagram's chapter key; omitted, the first) on the open whiteboard and returns it as a PNG image, with the error its script threw, if any. frame: \"all\" renders every frame of every scenario in turn and returns each one's file, with the findings of all of them. A diagram's result also lists its findings (overlaps, moves without a wire, unknown code names) and how its claims about the code stand. The PNG is also written to the path the result names. After publishing, render each frame you changed and look at it, instead of taking screenshots of the screen. The whiteboard must be open in Desktop: review_create opens it, and review_open opens an existing one.",
-            z.strictObject({ ...review, targetId: id, frame: id.optional() }),
+            "See a diagram, animation or clip as the reader does: Desktop draws one of its frames (frame: a frame key, a clip's marker key or a diagram's chapter key; omitted, the first) out of sight and returns it as a PNG image, with the error its script threw, if any. Give fromFiles, a folder of its files, to render a draft before it is on the whiteboard: it is checked as a publish would be, nothing is saved and the reader sees nothing. Give targetId to render a block already on the whiteboard. frame: \"all\" renders every frame of every scenario in turn and returns each one's file, with the findings of all of them. A diagram's result also lists its findings (overlaps, moves without a wire, unknown code names); a draft's also quotes its code ranges, and a published one's says how its claims about the code stand. The PNG is also written to the path the result names. Render a draft until it is right, then publish it once.",
+            z.strictObject({
+              ...review,
+              targetId: id.optional(),
+              fromFiles: id.optional(),
+              frame: id.optional(),
+            }),
             "GET",
             "/:reviewId/render",
           ),

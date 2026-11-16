@@ -258,6 +258,9 @@ export interface ICommonNativeHostService {
 	// Screenshots
 	getScreenshot(rect?: IRectangle, options?: INativeHostOptions & IScreenshotOptions): Promise<VSBuffer | undefined>;
 
+	/** Runs a step on a page in a window that is never shown, and captures what the step points at. */
+	renderHiddenPage(options: IHiddenPageRender): Promise<IHiddenPageResult>;
+
 	// GitHub mobile upload API (runs in main process to avoid CORS)
 	uploadFileViaMobileApi(token: string, repoId: string, fileName: string, fileBytes: VSBuffer, contentType: string): Promise<{ fileName: string; assetUrl: string; contentType: string }>;
 
@@ -369,3 +372,26 @@ export const INativeHostService = createDecorator<INativeHostService>('nativeHos
  * hosts.
  */
 export interface INativeHostService extends ICommonNativeHostService { }
+
+/** A step on a page that is rendered out of sight. */
+export interface IHiddenPageRender {
+	/** Renders that share a key share one loaded page. */
+	readonly key: string;
+	readonly url: string;
+	/** The page's width, in CSS pixels. */
+	readonly width: number;
+	readonly zoomFactor?: number;
+	/** A capture with a longer edge is scaled down to this many pixels. */
+	readonly maxEdge?: number;
+	/** Runs once, after the page loads. May answer `{ height }`, the height the page needs. */
+	readonly setup: string;
+	/** Runs for each render. Answers `{ rect, height }`: the part of the page to capture, and the height the page needs. */
+	readonly step: string;
+}
+
+export interface IHiddenPageResult {
+	/** What the step answered. */
+	readonly value: unknown;
+	/** The capture as a base64 PNG, when the step named a rect. */
+	readonly png?: string;
+}

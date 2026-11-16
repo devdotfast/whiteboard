@@ -7,7 +7,7 @@ import { VSBuffer } from '../../../../base/common/buffer.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { Event } from '../../../../base/common/event.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
-import { FocusMode, IScreenshotOptions } from '../../../../platform/native/common/native.js';
+import { FocusMode, IHiddenPageRender, IHiddenPageResult, IScreenshotOptions } from '../../../../platform/native/common/native.js';
 import { IWindowOpenable, IOpenWindowOptions, IOpenEmptyWindowOptions, IPoint, IRectangle, IOpenedMainWindow, IOpenedAuxiliaryWindow } from '../../../../platform/window/common/window.js';
 
 export const IHostService = createDecorator<IHostService>('hostService');
@@ -162,6 +162,12 @@ export interface IHostService {
 	 * Captures a screenshot.
 	 */
 	getScreenshot(rect?: IRectangle, options?: IScreenshotOptions): Promise<VSBuffer | undefined>;
+
+	/**
+	 * Runs a step on a page in a window that is never shown, and captures
+	 * what the step points at.
+	 */
+	renderHiddenPage(options: IHiddenPageRender): Promise<IHiddenPageResult>;
 
 	//#endregion
 

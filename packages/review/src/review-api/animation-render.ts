@@ -19,6 +19,13 @@ export const renderQuerySchema = z.object({
   frame: z.string().min(1).optional(),
 });
 
+/** A render of a block that is not on the board: its content, as an insert
+ * would give it. */
+export const draftRenderSchema = z.object({
+  content: z.json(),
+  frame: z.string().min(1).optional(),
+});
+
 /** Renders every stop: each scenario's frames in its order, then any frame
  * no scenario lists; a clip's markers or a played diagram's chapters. */
 export const RENDER_ALL = "all";
@@ -38,6 +45,11 @@ export const renderedFrameSchema = z.object({
   error: z.string().nullable(),
   /** The capture, base64. */
   png: z.string().min(1),
+  /** What the stage found drawn wrong on this stop, when the render ran the
+   * block itself. */
+  findings: z.array(z.string()).optional(),
+  /** What the stage decided for the author on this stop. */
+  notes: z.array(z.string()).optional(),
 });
 
 export type RenderedFrame = z.infer<typeof renderedFrameSchema>;
@@ -46,6 +58,18 @@ export interface RenderRequest {
   reviewId: string;
   targetId: string;
   frame: string;
+  /** The board holding only the block, for a render out of sight. */
+  snapshot?: Snapshot;
+}
+
+/** The board with only the block to render on it. */
+export function renderSnapshot(snapshot: Snapshot, targetId: string): Snapshot {
+  return {
+    ...snapshot,
+    document: elements(snapshot.document)
+      .filter(isStageBlock)
+      .filter((element) => element.id === targetId),
+  };
 }
 
 /** The host's way to a Desktop that shows the frame and captures it. */
