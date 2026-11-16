@@ -18,7 +18,8 @@ function themeCss(source: string | Uint8Array) {
   return `${faces.join("\n")}\n:root{${palette}}\n`;
 }
 
-// React stays external; fonts and wasm ship as files.
+// React and ProseMirror stay external, so a host shares its copies; fonts and
+// wasm ship as files.
 export default defineConfig({
   root: __dirname,
   plugins: [
@@ -75,7 +76,7 @@ export default defineConfig({
       input: {
         canvas: path.resolve(__dirname, "src/canvas-entry.ts"),
       },
-      external: [/^react(?:-dom)?(?:\/.*)?$/],
+      external: [/^react(?:-dom)?(?:\/.*)?$/, /^@tiptap\/pm\/.*$/],
       output: {
         entryFileNames: "index.js",
         chunkFileNames: "assets/[name]-[hash].js",
