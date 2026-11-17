@@ -16,7 +16,7 @@ import {
 } from "react";
 
 import { MarkdownContent } from "./agent-markdown";
-import { AnimationBlock } from "./animation/animation-block";
+import { AnimationBlock, diagramRevision } from "./animation/animation-block";
 import type { ApiDocumentData } from "./api-document";
 import { blockSectionSummary } from "./block-document-derivations";
 import { BoardLink } from "./board-link";
@@ -312,17 +312,14 @@ function AnimationDiagramBlock(props: BlockProps<"animation" | "clip">) {
 
 function DiagramBlock(props: BlockProps<"diagram">) {
   const { node } = props;
-  const { title, script, frames, scenarios, timeline, code, stage } = node;
-
-  // An edit draws the diagram again from a fresh stage, at its start.
-  const revision = useMemo(
-    () => JSON.stringify([script, frames, scenarios, timeline, code, stage]),
-    [script, frames, scenarios, timeline, code, stage],
-  );
 
   return (
-    <ClientDiagram kind="DIAGRAM" title={title} height={stage?.height ?? 320}>
-      <AnimationBlock key={revision} {...props} />
+    <ClientDiagram
+      kind="DIAGRAM"
+      title={node.title}
+      height={node.stage?.height ?? 320}
+    >
+      <AnimationBlock key={diagramRevision(node)} {...props} />
     </ClientDiagram>
   );
 }

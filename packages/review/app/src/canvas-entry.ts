@@ -10,4 +10,6 @@ export { staticPeeks } from "./share/peeks";
 
 export { readOnlyHost } from "./share/share-host";
 
+export { Diagram } from "./diagram/diagram";
+
 export { Whiteboard, WhiteboardProvider } from "./whiteboard";

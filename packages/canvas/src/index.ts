@@ -31,6 +31,40 @@ export declare function WhiteboardProvider(props: {
 
 export declare function Whiteboard(): ReactElement;
 
+/** A `diagram` block, as @dev.fast/whiteboard-document's `DiagramBlock`
+ * types it; pass that type's value. Only the fields a page reads are
+ * spelled out here. */
+export interface DiagramBlock {
+  readonly type: "diagram";
+  readonly id?: string;
+  readonly title: string;
+  readonly description?: string;
+  readonly script?: string;
+  readonly html?: string;
+  readonly code: Readonly<Record<string, { source: string; label?: string }>>;
+}
+
+/** What a diagram's stage found when its script ran. */
+export interface DiagramFindings {
+  /** What it drew wrong. */
+  findings: string[];
+  /** What the script asked of the diagram that it could not do. */
+  notes: string[];
+  /** What the script threw. */
+  error?: string;
+}
+
+/** One diagram block's header, stage and step player, at its container's
+ * width, without a board: no `WhiteboardProvider`. Render it in an element
+ * with the `review-canvas-root` class. `theme` defaults to "light";
+ * `onCode` gets the name in `block.code` of a clicked code link. */
+export declare function Diagram(props: {
+  block: DiagramBlock;
+  theme?: "light" | "dark";
+  onCode?(name: string): void;
+  onFindings?(report: DiagramFindings): void;
+}): ReactElement;
+
 export declare function ReviewTopBar(): ReactElement;
 
 export interface ShareView {

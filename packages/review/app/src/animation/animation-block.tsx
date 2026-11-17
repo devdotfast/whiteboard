@@ -1,50 +1,23 @@
 import type { BlockProps } from "@canvas/blocks";
 import { CodePeekCard } from "@canvas/CodePeek";
-import { useReviewDebugSettings } from "@canvas/debug-settings";
 import { DiagramHeader } from "@canvas/diagram-header";
-import { diagramStyles } from "@canvas/diagram-styles";
-import { DiagramTourOverlay, useDiagramTourShell } from "@canvas/diagram-tour";
 import { wbRuntime } from "@canvas/diagram/wb-runtime";
-import {
-  useDrawQueueControls,
-  useMotionPhase,
-} from "@canvas/draw-queue-provider";
 import { drawStyles } from "@canvas/draw-styles";
-import { countLabel } from "@canvas/format";
-import { useReviewSession } from "@canvas/host/review-session";
-import { useReviewPanel, useReviewPanelStore } from "@canvas/review-panel";
-import type { SourcePeekAnchor } from "@canvas/review-panel-model";
-import {
-  fontSize,
-  leading,
-  radius,
-  space,
-  tracking,
-} from "@canvas/scale.stylex";
-import { shellStyles } from "@canvas/shell-styles";
+import { fontSize, leading, radius, space } from "@canvas/scale.stylex";
 import { withClass } from "@canvas/stylex-props";
-import { themeClass, themeStyles } from "@canvas/theme-styles";
 import { tokens } from "@canvas/tokens.stylex";
-import { captureUiEvent } from "@canvas/ui-telemetry";
-import { Button } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { SegmentedControl } from "@canvas/ui/segmented";
 import { textStyles } from "@canvas/ui/text";
-import { useTooltip } from "@canvas/ui/tooltip";
-import { useDiagramSelection } from "@canvas/use-diagram-selection";
-import { useWhiteboardSettings } from "@canvas/whiteboard-settings";
 import type { ReviewRenderedFrame } from "@dev.fast/review-protocol";
 import {
-  type Block,
+  type DiagramBlock,
   anchorSelection,
-  animationCode,
-  animationCodeId,
 } from "@dev.fast/whiteboard-document";
 import { STAGE_KIT_CSS, STAGE_THEME } from "@review/animation-stage-kit";
 import * as stylex from "@stylexjs/stylex";
 import {
   type ReactNode,
-  type RefObject,
   useCallback,
   useEffect,
   useEffectEvent,
@@ -53,18 +26,12 @@ import {
   useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
 
-import {
-  animationTour,
-  frameAnchorId,
-  frameContent,
-  markerAnchorId,
-} from "./animation-tour";
+import { useBoardStageHost } from "./board-stage";
 import { useClipPlayer } from "./clip-player";
 import { useFramePlayer } from "./frame-player";
-import { useReportAnimationRun } from "./report-run";
 import { StepStrip } from "./stage-controls";
+import { type StageHost, type StageNode, codeEntry } from "./stage-host";
 import type { PlayerStop, StagePlayer } from "./stage-player";
 import {
   type HostMessage,
@@ -237,59 +204,6 @@ export function schemeOf(colorScheme: string): StageColorScheme {
 const reducedMotion = () =>
   matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-/** Blocks a stage may show with whiteboard.block(): any but animations and
- * clips, which would nest stages. */
-function embeddableBlocks(document: Block[]): Map<string, Block> {
-  const found = new Map<string, Block>();
-
-  const visit = (block: Block) => {
-    if (
-      block.id &&
-      block.type !== "animation" &&
-      block.type !== "clip" &&
-      block.type !== "diagram"
-    )
-      found.set(block.id, block);
-
-    if ("children" in block) block.children.forEach(visit);
-  };
-
-  document.forEach(visit);
-
-  return found;
-}
-
-type StageBlockProps = BlockProps<"animation" | "clip" | "diagram">;
-
-type DiagramNode = BlockProps<"diagram">["node"];
-
-/** A named range's source and label, however the block writes it. */
-function codeEntry(
-  node: StageBlockProps["node"],
-  name: string,
-): { source: string; label?: string } | undefined {
-  if (node.type === "diagram") return node.code[name];
-  const entry = node.code[name];
-
-  return entry === undefined ? undefined : animationCode(entry);
-}
-
-/** Whether each of a diagram's code names still holds: a range the board
- * marked stale, or could not resolve, has changed. */
-function codeStatus(
-  node: DiagramNode,
-  anchors: ReadonlyMap<string, SourcePeekAnchor>,
-): Record<string, "checked" | "changed"> {
-  return Object.fromEntries(
-    Object.keys(node.code).map((name) => [
-      name,
-      node.id && anchors.has(animationCodeId(node.id, name))
-        ? "checked"
-        : "changed",
-    ]),
-  );
-}
-
 /** A diagram's claim about the code, as its stage reports it. */
 interface Claim {
   label: string;
@@ -343,29 +257,52 @@ type StagePort = ReturnType<typeof useStagePort>;
  * the placeholders the stage lays out, so they are the real components. An
  * animation's reader steps through frames; a clip's plays one timeline.
  */
-export function AnimationBlock(props: StageBlockProps) {
-  const { node } = props;
-
-  if (node.type === "clip") return <ClipStage {...props} node={node} />;
-
-  if (node.type === "animation") return <FrameStage {...props} node={node} />;
-
-  if (node.frames) return <DiagramFrameStage {...props} node={node} />;
-
-  if (node.timeline) return <DiagramTimelineStage {...props} node={node} />;
-
-  return <DiagramStillStage {...props} node={node} />;
+export function AnimationBlock(
+  props: BlockProps<"animation" | "clip" | "diagram">,
+) {
+  return <Stage node={props.node} host={useBoardStageHost(props)} />;
 }
 
-function DiagramFrameStage(props: BlockProps<"diagram">) {
+/** An edit to what a diagram's stage runs: a fresh stage draws it, at its
+ * start, rather than one whose frames may have gone. */
+export const diagramRevision = ({
+  script,
+  frames,
+  scenarios,
+  timeline,
+  code,
+  stage,
+}: DiagramBlock) =>
+  JSON.stringify([script, frames, scenarios, timeline, code, stage]);
+
+/** A block's stage, with the player its kind steps or plays with. */
+export function Stage({ node, host }: { node: StageNode; host: StageHost }) {
+  if (node.type === "clip") return <ClipStage node={node} host={host} />;
+
+  if (node.type === "animation") return <FrameStage node={node} host={host} />;
+
+  if (node.frames) return <DiagramFrameStage node={node} host={host} />;
+
+  if (node.timeline) return <DiagramTimelineStage node={node} host={host} />;
+
+  return <DiagramStillStage node={node} host={host} />;
+}
+
+type KindProps<K extends "animation" | "clip" | "diagram"> = {
+  node: BlockProps<K>["node"];
+  host: StageHost;
+};
+
+function DiagramFrameStage({ node, host }: KindProps<"diagram">) {
   const port = useStagePort();
 
   return (
     <StageBlock
-      {...props}
+      node={node}
+      host={host}
       port={port}
       player={useFramePlayer(
-        { frames: props.node.frames ?? [], scenarios: props.node.scenarios },
+        { frames: node.frames ?? [], scenarios: node.scenarios },
         port.send,
         { track: true },
       )}
@@ -373,69 +310,81 @@ function DiagramFrameStage(props: BlockProps<"diagram">) {
   );
 }
 
-function DiagramTimelineStage(props: BlockProps<"diagram">) {
+function DiagramTimelineStage({ node, host }: KindProps<"diagram">) {
   const port = useStagePort();
 
   const markers = useMemo(
     () =>
-      (props.node.timeline?.chapters ?? []).map(
-        ({ key, title, caption, code }) => ({ key, title, caption, code }),
-      ),
-    [props.node.timeline],
+      (node.timeline?.chapters ?? []).map(({ key, title, caption, code }) => ({
+        key,
+        title,
+        caption,
+        code,
+      })),
+    [node.timeline],
   );
 
   return (
     <StageBlock
-      {...props}
+      node={node}
+      host={host}
       port={port}
       player={useClipPlayer({ markers }, port.send, { track: true })}
     />
   );
 }
 
-function DiagramStillStage(props: BlockProps<"diagram">) {
-  const port = useStagePort();
-
-  return (
-    <StageBlock {...props} port={port} player={stillPlayer(props.node.title)} />
-  );
-}
-
-function FrameStage(props: BlockProps<"animation">) {
+function DiagramStillStage({ node, host }: KindProps<"diagram">) {
   const port = useStagePort();
 
   return (
     <StageBlock
-      {...props}
+      node={node}
+      host={host}
       port={port}
-      player={useFramePlayer(props.node, port.send)}
+      player={stillPlayer(node.title)}
     />
   );
 }
 
-function ClipStage(props: BlockProps<"clip">) {
+function FrameStage({ node, host }: KindProps<"animation">) {
   const port = useStagePort();
 
   return (
     <StageBlock
-      {...props}
+      node={node}
+      host={host}
       port={port}
-      player={useClipPlayer(props.node, port.send)}
+      player={useFramePlayer(node, port.send)}
+    />
+  );
+}
+
+function ClipStage({ node, host }: KindProps<"clip">) {
+  const port = useStagePort();
+
+  return (
+    <StageBlock
+      node={node}
+      host={host}
+      port={port}
+      player={useClipPlayer(node, port.send)}
     />
   );
 }
 
 function StageBlock({
   node,
-  data,
-  children,
+  host,
   port: { portRef, showingRef, send },
   player,
-}: StageBlockProps & { port: StagePort; player: StagePlayer }) {
-  const { theme } = useReviewDebugSettings();
-  const panelStore = useReviewPanelStore();
-  const session = useReviewSession();
-  const { diagramFullscreenOnClick } = useWhiteboardSettings();
+}: {
+  node: StageNode;
+  host: StageHost;
+  port: StagePort;
+  player: StagePlayer;
+}) {
+  const { theme } = host;
   const frameRef = useRef<HTMLIFrameElement>(null);
   const [contentHeight, setContentHeight] = useState(STAGE_MIN_HEIGHT);
   // The board's reading width, or the widest the stage's content has
@@ -469,10 +418,7 @@ function StageBlock({
   const [findings, setFindings] = useState<string[]>([]);
   const [notes, setNotes] = useState<string[]>([]);
 
-  const status = useMemo(
-    () => (diagram ? codeStatus(diagram, data.anchors) : {}),
-    [diagram, data.anchors],
-  );
+  const status = host.codeStatus;
 
   // Each claim counts once: it matches when all its code holds, has changed
   // when some does not, and is unlinked when it names none.
@@ -498,14 +444,13 @@ function StageBlock({
   // How many times a diagram's stage has run its script to the end.
   const [runs, setRuns] = useState(0);
 
-  const reportRun = useReportAnimationRun(data.snapshot.reviewId, node.id);
+  const reportRun = host.report;
 
   // A block from the agent's stream paints its first frame in when the board
   // gets to it, and holds the draw queue until its stage says it is done.
-  const motion = useMotionPhase(node.id);
+  const { motion, painted } = host;
   const motionRef = useRef(motion);
   motionRef.current = motion;
-  const { painted } = useDrawQueueControls();
 
   // The stage showing now: whether it boots unseen, has run its scripts, was
   // told to paint, has painted, and reported an error.
@@ -522,67 +467,20 @@ function StageBlock({
     if (node.id) painted(node.id);
   }, [node.id, painted]);
 
-  // Fullscreen without a tour. Either way, a placeholder holds the inline
-  // figure's height so the document keeps its place.
-  const [expanded, setExpanded] = useState(false);
-  const [held, setHeld] = useState(0);
-
-  // The stage's inline width, which it keeps fullscreen, scaled to the room.
-  const [inlineWidth, setInlineWidth] = useState(0);
-
   const [room, setRoom] = useState<{ width: number; height: number } | null>(
     null,
   );
 
   const roomRef = useRef<HTMLDivElement>(null);
+  const embeddable = host.blocks;
+  const { activeIndex } = player;
 
-  // What the figure leaves behind when it moves to the overlay: a placeholder
-  // of its height, and the width its stage was laid out at.
-  const holdInline = () => {
-    setHeld(figureRef.current?.offsetHeight ?? 0);
-    setInlineWidth(Math.max(canvasRef.current?.clientWidth ?? 0, minWidth));
-  };
-
-  const openRef = useRef<HTMLButtonElement>(null);
-  const closeRef = useRef<HTMLButtonElement>(null);
-
-  const embeddable = useMemo(
-    () => embeddableBlocks(data.snapshot.document),
-    [data.snapshot.document],
-  );
-
-  const { stops, activeIndex } = player;
-  const stop = stops[activeIndex];
-
-  const anchorId = clip ? markerAnchorId : frameAnchorId;
-
-  // A stop per frame of the path showing, or per marker, when they show code.
-  const tour = useMemo(
-    () =>
-      animationTour(
-        { id: node.id, title: node.title },
-        data.anchors,
-        stops,
-        anchorId,
-      ),
-    [node.id, node.title, data.anchors, stops, anchorId],
-  );
-
-  const frameAnchor = tour && stop ? anchorId(node.id, stop.key) : null;
-
-  // Unlike a diagram's, the tour stays open on a stop it no longer has: a
-  // scenario switch moves it to the frame showing instead.
-  const overlay = useReviewPanel((state) =>
-    tour && state.overlayTour?.tourId === node.id ? state.overlayTour : null,
-  );
-
-  const tourOpen = overlay !== null;
-
-  // Set while the column shows this tour.
-  const { anchor: inlineAnchor, figureRef } = useDiagramSelection(
-    tour,
-    tourOpen || expanded,
-  );
+  const { figureRef, fullscreen, inlineWidth, ...chrome } = host.useChrome({
+    node,
+    player,
+    noun,
+    inlineWidth: () => Math.max(canvasRef.current?.clientWidth ?? 0, minWidth),
+  });
 
   // A new stage for each edit of what it runs; frame changes reuse it.
   const stageKey = useMemo(
@@ -627,54 +525,6 @@ function StageBlock({
 
   useEffect(() => onPhase(), [motion]);
 
-  const openTour = () => {
-    if (!tour || !frameAnchor) return;
-
-    if (!tourOpen) {
-      captureUiEvent(session, "tour_started", { steps: tour.stops.length });
-
-      if (!expanded) holdInline();
-    }
-
-    setExpanded(false);
-    panelStore
-      .getState()
-      .openOverlayTour({ tourId: node.id, kind: "animation" }, frameAnchor);
-  };
-
-  // A drawn element's code opens beside the board with the tour, at the
-  // frame showing, or with the tour fullscreen.
-  const reveal = (name: string) => {
-    const anchor = data.anchors.get(animationCodeId(node.id, name));
-
-    if (!anchor) return;
-    captureUiEvent(session, "peek_opened", { via: "diagram" });
-    const { openPeek, moveOverlayTour, active } = panelStore.getState();
-
-    const tourStop = tour?.stops.find((item) => item.anchor.id === frameAnchor);
-
-    if (!tour || !tourStop || !stop)
-      return openPeek({
-        kind: "peek",
-        anchor,
-        content: { kind: "source", source: anchor.peek },
-      });
-
-    if (tourOpen) return moveOverlayTour(tourStop.anchor.id, { reveal: true });
-
-    if (expanded || diagramFullscreenOnClick) return openTour();
-
-    openPeek({
-      kind: "peek",
-      anchor: tourStop.anchor,
-      content: frameContent(node.id, data.anchors, stop, name),
-      tour: {
-        definition: tour,
-        revealRequest: (active?.tour?.revealRequest ?? 0) + 1,
-      },
-    });
-  };
-
   const onMessage = useRef<(message: StageMessage) => void>(() => {});
 
   onMessage.current = (message) => {
@@ -692,7 +542,7 @@ function StageBlock({
         setSlots(message.slots);
         break;
       case "reveal":
-        reveal(message.name);
+        chrome.reveal(message.name);
         break;
       case "library":
         loadLibrary(message.name).then(
@@ -708,7 +558,7 @@ function StageBlock({
         setNotes(message.notes ?? []);
         break;
       case "escape":
-        if (fullscreen) close();
+        chrome.escape();
         break;
       case "error":
         setError(message.message);
@@ -767,7 +617,7 @@ function StageBlock({
         kit: STAGE_KIT_CSS,
         autoSize: node.type === "diagram" || node.height === "auto",
         code: Object.keys(node.code),
-        codeTitles: codeTitles(node, data.anchors),
+        codeTitles: host.codeTitles,
         blocks: [...embeddable.keys()],
         ...readTheme(figure),
         scale: SCALE,
@@ -794,7 +644,7 @@ function StageBlock({
         }),
       };
     },
-    [node, data.anchors, embeddable],
+    [node, host.codeTitles, embeddable],
   );
 
   // What a measuring copy of an animation boots with: the scenario showing,
@@ -1130,12 +980,12 @@ function StageBlock({
   );
 
   useEffect(() => {
-    if (!node.id) return;
+    if (!node.id || host.reviewId === undefined) return;
 
-    return registerStageRenderer(data.snapshot.reviewId, node.id, {
+    return registerStageRenderer(host.reviewId, node.id, {
       show: (key) => show(key),
     });
-  }, [data.snapshot.reviewId, node.id]);
+  }, [host.reviewId, node.id]);
 
   // Measure again in a new copy after anything that can move a frame's layout.
   const remeasure = useCallback(() => {
@@ -1167,14 +1017,6 @@ function StageBlock({
     if (figureRef.current)
       send({ type: "theme", ...readTheme(figureRef.current) });
   }, [theme, send]);
-
-  const { closeOverlayTour, moveOverlayTour } = panelStore.getState();
-  const collapse = useCallback(() => setExpanded(false), []);
-  const close = tourOpen ? closeOverlayTour : collapse;
-
-  const { portalTarget } = useDiagramTourShell(tourOpen || expanded, close);
-
-  const fullscreen = (tourOpen || expanded) && portalTarget !== null;
 
   // Fullscreen, the room the controls leave the stage, inside its padding.
   useLayoutEffect(() => {
@@ -1226,100 +1068,6 @@ function StageBlock({
 
     return () => observer.disconnect();
   }, [fullscreen, remeasure]);
-
-  // Focus follows the figure in and back out to the control that opened it.
-  const wasFullscreen = useRef(false);
-
-  useEffect(() => {
-    if (fullscreen) closeRef.current?.focus();
-    else if (wasFullscreen.current) openRef.current?.focus();
-
-    wasFullscreen.current = fullscreen;
-  }, [fullscreen]);
-
-  // The tour's panel picked a stop (its Next, a click, its scroll): show
-  // that frame, moving to it when it is the next one. A stop the tour no
-  // longer has, after a scenario switch, gives way to the frame showing.
-  const followPanel = useEffectEvent(() => {
-    const anchor = panelStore.getState().overlayTour?.anchor;
-
-    if (!tour || !frameAnchor || !anchor) return;
-    const position = tour.stops.findIndex((item) => item.anchor.id === anchor);
-
-    if (position < 0) moveOverlayTour(frameAnchor, { reveal: true });
-    else if (position !== activeIndex) player.pick(position, "tour");
-  });
-
-  const overlayAnchor = overlay?.anchor;
-
-  useEffect(() => {
-    if (overlayAnchor) followPanel();
-  }, [overlayAnchor, tour]);
-
-  // The column's tour picked a stop (its Next, a click, its scroll): show
-  // that frame, as the overlay's panel does.
-  const followColumn = useEffectEvent(() => {
-    if (!tour || fullscreen || !inlineAnchor) return;
-
-    const position = tour.stops.findIndex(
-      (item) => item.anchor.id === inlineAnchor,
-    );
-
-    if (position >= 0 && position !== activeIndex)
-      player.pick(position, "tour");
-  });
-
-  useEffect(() => {
-    if (inlineAnchor) followColumn();
-  }, [inlineAnchor, tour]);
-
-  // The frame changed some other way (the controls, playback, the stage, a
-  // scenario): the open tour follows it, fullscreen or in the column. Each
-  // side writes only what differs, so neither echoes the other.
-  const followFrame = useEffectEvent(() => {
-    const { overlayTour, active, openPeek } = panelStore.getState();
-
-    if (!tour || !frameAnchor) return;
-
-    if (overlayTour?.tourId === node.id) {
-      if (overlayTour.anchor !== frameAnchor)
-        moveOverlayTour(frameAnchor, { reveal: true });
-
-      return;
-    }
-
-    const tourStop = tour.stops.find((item) => item.anchor.id === frameAnchor);
-
-    if (
-      !inlineAnchor ||
-      fullscreen ||
-      !tourStop ||
-      (active?.anchor?.id === frameAnchor && active.tour?.definition === tour)
-    )
-      return;
-    openPeek({
-      kind: "peek",
-      anchor: tourStop.anchor,
-      content: tourStop.content,
-      tour: {
-        definition: tour,
-        revealRequest: (active?.tour?.revealRequest ?? 0) + 1,
-      },
-    });
-  });
-
-  // Not on mount: a restored tour's stop leads the frame there.
-  const followed = useRef({ frameAnchor, tour });
-
-  useEffect(() => {
-    if (
-      followed.current.frameAnchor === frameAnchor &&
-      followed.current.tour === tour
-    )
-      return;
-    followed.current = { frameAnchor, tour };
-    followFrame();
-  }, [frameAnchor, tour]);
 
   const fixedHeight =
     node.type !== "diagram" && node.height !== "auto" ? node.height : null;
@@ -1375,39 +1123,8 @@ function StageBlock({
       <DiagramHeader
         kind={diagram ? "DIAGRAM" : clip ? "CLIP" : "ANIMATION"}
         title={node.title}
-        meta={still ? undefined : `${activeIndex + 1} / ${stops.length}`}
-        action={
-          <>
-            {fullscreen ? (
-              <Button
-                ref={closeRef}
-                xstyle={diagramStyles.button}
-                aria-label={tourOpen ? "Close tour" : `Close expanded ${noun}`}
-                onClick={close}
-              >
-                Close
-              </Button>
-            ) : tour ? (
-              <TourButton
-                buttonRef={openRef}
-                stops={tour.stops.length}
-                onClick={openTour}
-              />
-            ) : (
-              <Button
-                ref={openRef}
-                xstyle={diagramStyles.button}
-                aria-label={`Expand ${noun}`}
-                onClick={() => {
-                  holdInline();
-                  setExpanded(true);
-                }}
-              >
-                Expand
-              </Button>
-            )}
-          </>
-        }
+        meta={still ? undefined : `${activeIndex + 1} / ${player.stops.length}`}
+        action={chrome.action}
       />
       {diagram?.description && (
         <p {...stylex.props(styles.description)}>{diagram.description}</p>
@@ -1521,7 +1238,7 @@ function StageBlock({
                           />
                         )
                       : embeddable.get(slot.ref) &&
-                        children([embeddable.get(slot.ref)!])}
+                        host.renderBlocks([embeddable.get(slot.ref)!])}
                   </SlotOverlay>
                 ))}
               </div>
@@ -1553,53 +1270,7 @@ function StageBlock({
     </figure>
   );
 
-  if (!fullscreen) return figure;
-
-  const placeholder = <div aria-hidden="true" style={{ height: held }} />;
-
-  if (tour && overlay)
-    return (
-      <>
-        {placeholder}
-        {createPortal(
-          <DiagramTourOverlay
-            tour={tour}
-            activeAnchor={overlay.anchor}
-            revealRequest={overlay.revealRequest}
-            onActiveAnchorChange={moveOverlayTour}
-            onClose={closeOverlayTour}
-          >
-            {figure}
-          </DiagramTourOverlay>,
-          portalTarget,
-        )}
-      </>
-    );
-
-  // Portaled outside .review-app, so it carries the theme itself, as the
-  // diagram tour overlay does.
-  return (
-    <>
-      {placeholder}
-      {createPortal(
-        <div
-          {...withClass(
-            `review-app--theme-${theme}`,
-            themeStyles.vars,
-            themeClass(theme),
-            styles.overlay,
-            shellStyles.clearsWindowControls,
-          )}
-          role="dialog"
-          aria-modal="true"
-          aria-label={node.title}
-        >
-          {figure}
-        </div>,
-        portalTarget,
-      )}
-    </>
-  );
+  return chrome.frame(figure);
 }
 
 /** A hidden copy of the stage that shows every frame of the scenario in
@@ -1707,62 +1378,6 @@ function SlotOverlay({
   );
 }
 
-/** Opens the tour; its tooltip counts the stops. */
-function TourButton({
-  buttonRef,
-  stops,
-  onClick,
-}: {
-  buttonRef: RefObject<HTMLButtonElement | null>;
-  stops: number;
-  onClick(): void;
-}) {
-  const tooltip = useTooltip(countLabel(stops, "stop"), { quick: true });
-
-  const ref = useCallback(
-    (button: HTMLButtonElement | null) => {
-      buttonRef.current = button;
-
-      return tooltip(button);
-    },
-    [buttonRef, tooltip],
-  );
-
-  return (
-    <Button
-      ref={ref}
-      className="diagram-tour-button"
-      xstyle={diagramStyles.button}
-      data-tour-target="diagram-tour"
-      onClick={onClick}
-    >
-      Tour
-    </Button>
-  );
-}
-
-/** What hovering a drawn element that opens code says: its label, file and
- * lines. */
-function codeTitles(
-  node: StageBlockProps["node"],
-  anchors: ReadonlyMap<string, SourcePeekAnchor>,
-): Record<string, string> {
-  return Object.fromEntries(
-    Object.keys(node.code).flatMap((name) => {
-      const anchor = anchors.get(animationCodeId(node.id, name));
-
-      if (!anchor) return [];
-      const { file, start, end } = anchor.peek;
-      const label = codeEntry(node, name)?.label ?? name;
-
-      const lines =
-        start.line === end.line ? `${start.line}` : `${start.line}–${end.line}`;
-
-      return [[name, `${label} · ${file.split("/").at(-1)}:${lines}`]];
-    }),
-  );
-}
-
 const narrow = "@media (max-width: 720px)";
 
 const styles = stylex.create({
@@ -1836,16 +1451,6 @@ const styles = stylex.create({
   // stage asked.
   sheet: {
     position: "relative",
-  },
-  overlay: {
-    position: "fixed",
-    inset: 0,
-    zIndex: tokens.reviewDebugLayer,
-    boxSizing: "border-box",
-    display: "flex",
-    flexDirection: "column",
-    padding: { default: space.s24, [narrow]: space.s8 },
-    backgroundColor: tokens.bg,
   },
   frame: {
     display: "block",
