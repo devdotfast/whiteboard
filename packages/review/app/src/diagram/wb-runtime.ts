@@ -4379,6 +4379,26 @@ export function wbRuntime(port: MessagePort): void {
     markup.className = "wb-html";
     markup.innerHTML = diagram.html ?? "<div data-wb-drawing></div>";
 
+    // diagram.html is at least as wide as the board's column, as any page
+    // is, so grid fractions, percentages and growing flex items fill the
+    // column. Otherwise a mock screen whose parts are placed with
+    // position: absolute shrinks to its in-flow text and cuts them off.
+    const columnWidth =
+      diagram.html && diagram.room > 0
+        ? `${diagram.room - 2 * diagram.inset}px`
+        : "";
+
+    markup.style.minWidth = columnWidth;
+
+    // The page's own width, without the column's: what sits beside a graph.
+    const drawnWidth = () => {
+      markup.style.minWidth = "";
+      const width = markup.getBoundingClientRect().width;
+      markup.style.minWidth = columnWidth;
+
+      return width;
+    };
+
     // Rules that name the document reach nothing once scoped to the page,
     // and rules for wb's own elements stop at the mount: say so.
     const strayRules: string[] = [];
@@ -5946,10 +5966,7 @@ export function wbRuntime(port: MessagePort): void {
           // What sits beside the graph takes its share of the width first.
           Object.assign(graph.style, { width: "0px", height: "0px" });
 
-          const room = Math.max(
-            240,
-            stage - markup.getBoundingClientRect().width,
-          );
+          const room = Math.max(240, stage - drawnWidth());
 
           const panels = [
             ...graph.querySelectorAll<HTMLElement>(":scope > wb-panel"),

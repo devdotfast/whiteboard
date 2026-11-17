@@ -415,6 +415,27 @@ describe("diagram", () => {
     );
   });
 
+  it("lays diagram.html out at least as wide as the board's column", async () => {
+    // Two square screens side by side, each a grid fraction with nothing
+    // in flow to give it width: they fill the column, so each is about
+    // half of its 860px tall.
+    await mount(
+      diagram({
+        html: `
+          <style>
+            .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+            .screen { aspect-ratio: 1; }
+          </style>
+          <div class="pair"><div class="screen"></div><div class="screen"></div></div>
+        `,
+        script: null,
+        code: {},
+      }),
+    );
+    expect(await settled(() => stageHeight() > 360, 8000)).toBe(true);
+    expect(alertText()).toBeNull();
+  });
+
   it("draws where diagram.html puts data-wb-drawing, and grows a stage given a size to hold the page", async () => {
     const ran = () =>
       document
