@@ -1,0 +1,22 @@
+services:
+  # Whiteboard Desktop (Electron). It has no web UI, so there is no port or preview:
+  # the window opens on the sandbox display (:99), which the user watches in the
+  # Agent preview. Drive its renderer with
+  #   agent-browser --session app --cdp 9333 snapshot -i
+  # Restart it after changing Code OSS sources (rerun setup first to rebuild them);
+  # the Review server and canvas rebuild on launch when stale.
+  - name: desktop
+    command: |
+      export PATH=/opt/whiteboard-node/bin:$PATH
+      exec pnpm desktop:run
+    environment:
+      - name: DISPLAY
+        value: ":99"
+      - name: DEV_FAST_REVIEW_REMOTE_DEBUGGING_PORT
+        value: "9333"
+      - name: DEV_FAST_REVIEW_DISABLE_GPU
+        value: "1"
+      # The sandbox runs as root, which Electron only allows without its sandbox.
+      - name: DEV_FAST_REVIEW_NO_SANDBOX
+        value: "1"
+    restart: on-failure
