@@ -1,4 +1,8 @@
 import { REVIEW_CANVAS_RESUME_EVENT } from "@dev.fast/review-protocol";
+import {
+  type DiffSelection,
+  selectionKey,
+} from "@dev.fast/whiteboard-document";
 import { type ReactNode, act, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -373,6 +377,81 @@ describe("Guided tour panel", () => {
       ).toBe("first");
     },
   );
+
+  it("reveals the requested code card in a stop that shows several", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    const sources: DiffSelection[] = [1, 40].map((line) => ({
+      file: "order.ts",
+      start: { side: "head", line },
+      end: { side: "head", line: line + 4 },
+    }));
+
+    const anchor = { id: "code", title: "Code" } as PeekAnchor;
+
+    const tour: GuidedTour = {
+      id: "tour",
+      stops: [
+        {
+          anchor,
+          label: "Code",
+          content: { kind: "source", source: sources[0]!, more: [sources[1]!] },
+        },
+      ],
+    };
+
+    const renderTour = (revealRequest: number, revealCode?: string) =>
+      renderWithSession(
+        <ReviewDebugSettingsProvider>
+          <ReviewProvider>
+            <ReviewPanelProvider>
+              <GuidedTourPanel
+                tour={tour}
+                activeAnchor="code"
+                revealRequest={revealRequest}
+                revealCode={revealCode}
+                onActiveAnchorChange={() => {}}
+                onClose={() => {}}
+              />
+            </ReviewPanelProvider>
+          </ReviewProvider>
+        </ReviewDebugSettingsProvider>,
+      );
+
+    await act(async () => renderTour(0));
+
+    const body = container.querySelector<HTMLElement>(panelBodySelector)!;
+
+    const stop = container.querySelector<HTMLElement>(
+      "section[data-review-anchor-id]",
+    )!;
+
+    const [, secondCard] = stop.querySelectorAll<HTMLElement>(
+      "[data-code-peek-key]",
+    );
+
+    vi.spyOn(body, "getBoundingClientRect").mockReturnValue(
+      domRect({ top: 100, bottom: 600, height: 500 }),
+    );
+    vi.spyOn(stop, "getBoundingClientRect").mockReturnValue(
+      domRect({ top: 100, height: 1400 }),
+    );
+    vi.spyOn(secondCard!, "getBoundingClientRect").mockReturnValue(
+      domRect({ top: 900, height: 300 }),
+    );
+
+    const scrollTo = vi.fn<(options: ScrollToOptions) => void>();
+    Object.defineProperty(body, "scrollTo", { value: scrollTo });
+
+    // The heading leads to the stop's first code.
+    await act(async () => renderTour(1, selectionKey(sources[0]!)));
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: -18 });
+
+    await act(async () => renderTour(2, selectionKey(sources[1]!)));
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 782 });
+  });
 });
 
 describe("Side panel scrollbar", () => {

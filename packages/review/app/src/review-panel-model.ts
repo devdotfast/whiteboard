@@ -42,7 +42,12 @@ export interface GuidedTour {
 
 export interface PeekPanel {
   kind: "peek";
-  tour?: { definition: GuidedTour; revealRequest: number };
+  tour?: {
+    definition: GuidedTour;
+    revealRequest: number;
+    /** The `selectionKey` of the stop's code to reveal, not its heading. */
+    revealCode?: string;
+  };
   anchor?: PeekAnchor;
   content: ReviewPeekContent;
 }

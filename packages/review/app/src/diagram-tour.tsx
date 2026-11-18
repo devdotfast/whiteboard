@@ -27,6 +27,7 @@ export function DiagramTourOverlay({
   tour,
   activeAnchor,
   revealRequest,
+  revealCode,
   onActiveAnchorChange,
   onClose,
   children,
@@ -36,6 +37,7 @@ export function DiagramTourOverlay({
   tour: GuidedTour;
   activeAnchor: string;
   revealRequest: number;
+  revealCode?: string;
   onActiveAnchorChange: (anchor: string, options: { reveal: boolean }) => void;
   onClose: () => void;
   children: ReactNode;
@@ -111,6 +113,7 @@ export function DiagramTourOverlay({
           tour={tour}
           activeAnchor={activeAnchor}
           revealRequest={revealRequest}
+          revealCode={revealCode}
           onActiveAnchorChange={onActiveAnchorChange}
           onClose={onClose}
           docked

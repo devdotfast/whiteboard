@@ -39,6 +39,7 @@ import {
   anchorSelection,
   animationCode,
   animationCodeId,
+  selectionKey,
 } from "@dev.fast/whiteboard-document";
 import { STAGE_KIT_CSS, STAGE_THEME } from "@review/animation-stage-kit";
 import * as stylex from "@stylexjs/stylex";
@@ -627,7 +628,7 @@ function StageBlock({
 
   useEffect(() => onPhase(), [motion]);
 
-  const openTour = () => {
+  const openTour = (revealCode?: string) => {
     if (!tour || !frameAnchor) return;
 
     if (!tourOpen) {
@@ -639,7 +640,11 @@ function StageBlock({
     setExpanded(false);
     panelStore
       .getState()
-      .openOverlayTour({ tourId: node.id, kind: "animation" }, frameAnchor);
+      .openOverlayTour(
+        { tourId: node.id, kind: "animation" },
+        frameAnchor,
+        revealCode,
+      );
   };
 
   // A drawn element's code opens beside the board with the tour, at the
@@ -660,9 +665,12 @@ function StageBlock({
         content: { kind: "source", source: anchor.peek },
       });
 
-    if (tourOpen) return moveOverlayTour(tourStop.anchor.id, { reveal: true });
+    const code = selectionKey(anchor.peek);
 
-    if (expanded || diagramFullscreenOnClick) return openTour();
+    if (tourOpen)
+      return moveOverlayTour(tourStop.anchor.id, { reveal: true, code });
+
+    if (expanded || diagramFullscreenOnClick) return openTour(code);
 
     openPeek({
       kind: "peek",
@@ -671,6 +679,7 @@ function StageBlock({
       tour: {
         definition: tour,
         revealRequest: (active?.tour?.revealRequest ?? 0) + 1,
+        revealCode: code,
       },
     });
   };
@@ -1391,7 +1400,7 @@ function StageBlock({
               <TourButton
                 buttonRef={openRef}
                 stops={tour.stops.length}
-                onClick={openTour}
+                onClick={() => openTour()}
               />
             ) : (
               <Button
@@ -1566,6 +1575,7 @@ function StageBlock({
             tour={tour}
             activeAnchor={overlay.anchor}
             revealRequest={overlay.revealRequest}
+            revealCode={overlay.revealCode}
             onActiveAnchorChange={moveOverlayTour}
             onClose={closeOverlayTour}
           >
