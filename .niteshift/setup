@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Prepares a Whiteboard dev environment: the monorepo, the Code OSS fork, a dev-fast
+# Desktop build, and Chromium for the canvas browser tests. Safe to rerun; every step
+# skips work that is already current.
+set -euo pipefail
+
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO"
+
+# The monorepo wants Node 24 and the Code OSS fork pins an exact 24.x
+# (apps/review-desktop/code-oss/.nvmrc); one install beside the sandbox's Node covers
+# both. Niteshift's own tools keep using /usr/local/bin/node.
+NODE_VERSION="$(tr -d '[:space:]' < apps/review-desktop/code-oss/.nvmrc)"
+NODE_DIR="/opt/node-v$NODE_VERSION-linux-x64"
+if [[ ! -x "$NODE_DIR/bin/node" ]]; then
+  echo "Installing Node $NODE_VERSION into $NODE_DIR"
+  tmp="$(mktemp -d)"
+  curl -fsSL --retry 3 "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-linux-x64.tar.xz" -o "$tmp/node.tar.xz"
+  sudo mkdir -p /opt
+  sudo tar -xJf "$tmp/node.tar.xz" -C /opt
+  rm -rf "$tmp"
+fi
+export PATH="$NODE_DIR/bin:$PATH"
+# A stable path for services.yaml, so it does not repeat the version.
+sudo ln -sfn "$NODE_DIR" /opt/whiteboard-node
+
+# pnpm comes from packageManager in package.json.
+if [[ "$(pnpm -v 2>/dev/null || true)" != "$(node -p "require('./package.json').packageManager.split('@')[1]")" ]]; then
+  corepack enable pnpm
+fi
+
+# Headers for the Code OSS native modules (same list as Whiteboard CI).
+missing=()
+for pkg in libx11-dev libxkbfile-dev libkrb5-dev libsecret-1-dev python3; do
+  dpkg -s "$pkg" >/dev/null 2>&1 || missing+=("$pkg")
+done
+if (( ${#missing[@]} )); then
+  sudo apt-get update
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${missing[@]}"
+fi
+
+# Fast when node_modules already matches the lockfile.
+pnpm install --frozen-lockfile
+
+# Builds Code OSS (npm ci only when its lockfiles change, transpile without the
+# typecheck, extensions, Electron) using freshness stamps under code-oss/.build.
+REVIEW_DESKTOP_DEV_FAST=1 pnpm desktop:build
+
+# desktop:run rebuilds the Review server and canvas when stale; do it here so the
+# desktop service launches quickly.
+# shellcheck source=/dev/null
+source apps/review-desktop/scripts/freshness.sh
+rebuild_review_desktop_outputs "$REPO" "$REPO/packages/review"
+node apps/review-desktop/scripts/copy-canvas.mjs
+
+# Chromium for `pnpm --filter @dev.fast/review-canvas test:browser` (Vitest Browser Mode).
+pnpm --filter @dev.fast/review-canvas exec playwright install chromium

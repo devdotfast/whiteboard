@@ -98,6 +98,11 @@ fi
 if [[ "${DEV_FAST_REVIEW_DISABLE_GPU:-0}" == "1" ]]; then
   CODE_ARGS+=(--disable-gpu)
 fi
+if [[ "${DEV_FAST_REVIEW_NO_SANDBOX:-0}" == "1" ]]; then
+  # Electron refuses to start as root with the Chromium sandbox, as in
+  # containers and cloud sandboxes.
+  CODE_ARGS+=(--no-sandbox)
+fi
 if [[ "${DEV_FAST_REVIEW_FORCE_ACCESSIBILITY:-0}" == "1" ]]; then
   # Keeps Chromium's renderer accessibility tree alive for the generic Linux
   # AT-SPI Computer Use backend. It is deliberately opt-in outside DevBoxes.
