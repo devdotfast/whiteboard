@@ -14,8 +14,6 @@ services:
         value: ":99"
       - name: DEV_FAST_REVIEW_REMOTE_DEBUGGING_PORT
         value: "9333"
-      - name: DEV_FAST_REVIEW_DISABLE_GPU
-        value: "1"
       # The sandbox runs as root, which Electron only allows without its sandbox.
       - name: DEV_FAST_REVIEW_NO_SANDBOX
         value: "1"
