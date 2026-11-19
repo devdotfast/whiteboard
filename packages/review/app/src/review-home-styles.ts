@@ -270,6 +270,8 @@ export const styles = stylex.create({
     lineHeight: leading.px22,
   },
   parentTitle: { fontWeight: fontWeight.medium },
+  // Trails the title's last word, as a PR list writes it.
+  pullRequestNumber: { marginLeft: space.s8 },
   nestedRow: { paddingLeft: space.s48 },
   nestedConnector: {
     position: "absolute",

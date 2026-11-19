@@ -1,5 +1,9 @@
 import { BoardDisclosure } from "@canvas/ui/board-disclosure";
-import { BoardIcon, PullRequestStateIcon } from "@canvas/ui/board-icons";
+import {
+  BoardIcon,
+  PullRequestNumber,
+  PullRequestStateIcon,
+} from "@canvas/ui/board-icons";
 import { IconButton, buttonStyles } from "@canvas/ui/button";
 import { CrumbSeparator } from "@canvas/ui/crumbs";
 import { EmptyState } from "@canvas/ui/empty-state";
@@ -222,6 +226,7 @@ function BoardRow({
 }): ReactElement {
   const [childError, setChildError] = useState("");
   const isCurrent = board.reviewId === current;
+  const prNumber = board.origin?.pullRequestNumber;
 
   const newChild =
     onNewChild && canAddChildWhiteboard(board) ? onNewChild : undefined;
@@ -301,7 +306,10 @@ function BoardRow({
             )}
           </span>
           <span
-            {...stylex.props(styles.rowText, newChild && styles.textWithAction)}
+            {...stylex.props(
+              styles.rowText,
+              newChild && !prNumber && styles.textWithAction,
+            )}
           >
             {parentTitle ? (
               <span {...stylex.props(styles.path)}>
@@ -341,11 +349,18 @@ function BoardRow({
               </span>
             )}
           </span>
-          {board.origin?.pullRequestNumber ? (
-            <PullRequestStateIcon
-              number={board.origin.pullRequestNumber}
-              state={board.pullRequestState}
-            />
+          {prNumber ? (
+            <>
+              {/* The "+" for a child board sits between number and icon. */}
+              <PullRequestNumber
+                number={prNumber}
+                xstyle={newChild && styles.textWithAction}
+              />
+              <PullRequestStateIcon
+                number={prNumber}
+                state={board.pullRequestState}
+              />
+            </>
           ) : null}
         </button>
         {newChild ? (
@@ -355,7 +370,7 @@ function BoardRow({
             onError={setChildError}
             xstyle={[
               styles.childAction,
-              !!board.origin?.pullRequestNumber && styles.childActionWithPr,
+              !!prNumber && styles.childActionWithPr,
             ]}
           />
         ) : null}

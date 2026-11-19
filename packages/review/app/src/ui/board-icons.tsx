@@ -1,3 +1,4 @@
+import { fontSize } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import { useTooltip } from "@canvas/ui/tooltip";
 import {
@@ -93,6 +94,22 @@ export function PullRequestStateIcon({
   );
 }
 
+/** "#908", the PR number a list row shows beside its state icon. The icon
+ * already names the PR to assistive tech, so this is hidden from it. */
+export function PullRequestNumber({
+  number,
+  xstyle,
+}: {
+  number: number;
+  xstyle?: stylex.StyleXStyles;
+}): ReactElement {
+  return (
+    <span aria-hidden="true" {...stylex.props(styles.number, xstyle)}>
+      #{number}
+    </span>
+  );
+}
+
 const styles = stylex.create({
   icon: {
     flexShrink: 0,
@@ -105,6 +122,15 @@ const styles = stylex.create({
   kind: { color: tokens.inkMuted },
   current: { color: tokens.accent },
   state: { display: "inline-flex", flexShrink: 0 },
+  // As a terminal prints it; digits keep their width down a list.
+  number: {
+    flexShrink: 0,
+    color: tokens.inkFaint,
+    fontFamily: tokens.fontMono,
+    fontSize: fontSize.small,
+    fontVariantNumeric: "tabular-nums",
+    whiteSpace: "nowrap",
+  },
 });
 
 const stateStyles = stylex.create({
