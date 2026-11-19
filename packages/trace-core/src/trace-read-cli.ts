@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import path from "node:path";
 import type { Writable } from "node:stream";
 
 import {
@@ -20,6 +22,8 @@ import {
   parseRepo,
   pullReviewTraceCorpus,
 } from "./review-agent-traces";
+import { listLocalTraceSessionIds } from "./trace-local-discovery";
+import { storageFor } from "./trace-read";
 import { resolveTraceStorage } from "./trace-storage/resolve";
 import type { TraceStorage, TraceStorageKind } from "./trace-storage/types";
 
@@ -310,15 +314,29 @@ export async function runTracePull(input: {
       scope = { session: input.scope.session };
       sessions = [{ id: input.scope.session }];
     } else {
-      sessions = (await listRepositoryTraceSessionIds(input.cwd)).map((id) => ({
-        id,
-      }));
+      const ids = await listRepositoryTraceSessionIds(input.cwd);
+
+      if (!(await storageFor(storage, input.cwd))) {
+        ids.push(...(await listLocalTraceSessionIds(input.cwd)));
+      }
+
+      sessions = [...new Set(ids)].map((id) => ({ id }));
       scope = { repository: input.repo ?? "current" };
     }
 
     const repo = input.repo
       ? parseRepo(input.repo)
-      : await inferRepoFromGit(repoRoot);
+      : await inferRepoFromGit(repoRoot).catch(async (error) => {
+          if (await storageFor(storage, repoRoot)) throw error;
+
+          return {
+            owner: "local",
+            repo: createHash("sha256")
+              .update(path.resolve(repoRoot))
+              .digest("hex")
+              .slice(0, 16),
+          };
+        });
 
     const result = await pullReviewTraceCorpus({
       repo,
