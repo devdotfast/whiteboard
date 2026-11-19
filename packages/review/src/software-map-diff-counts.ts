@@ -449,6 +449,7 @@ function splitGitDiff(
     oldFile: string | null;
     newFile: string | null;
     lines: string[];
+    inHunk: boolean;
   } | null = null;
 
   for (const line of diff.split(/\r?\n/)) {
@@ -461,11 +462,23 @@ function splitGitDiff(
         });
       }
 
-      current = { oldFile: null, newFile: null, lines: [] };
+      current = { oldFile: null, newFile: null, lines: [], inHunk: false };
       continue;
     }
 
     if (!current) continue;
+
+    // Inside a hunk, "--- " and "+++ " are removed "-- " and added "++ "
+    // lines (SQL or Lua comments), not file headers.
+    current.inHunk = line.startsWith("@@")
+      ? true
+      : current.inHunk && (line === "" || /^[ +\-\\]/.test(line));
+
+    if (current.inHunk) {
+      current.lines.push(line);
+      continue;
+    }
+
     const oldFile = parseGitFileLine(line, "--- ");
     const newFile = parseGitFileLine(line, "+++ ");
 
