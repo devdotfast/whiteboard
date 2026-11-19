@@ -7,7 +7,6 @@ import type { ReviewDiffProgressState, ReviewDiffSection } from "../common/revie
  *--------------------------------------------------------------------------------------------*/
 
 import { Button } from "../../base/browser/ui/button/button.js";
-import { isEqual } from "../../base/common/resources.js";
 import { URI } from "../../base/common/uri.js";
 import type {
   IResourceLabel,
@@ -50,6 +49,12 @@ export interface ReviewMultiDiffHeaderEntry {
 	readonly onToggleViewed?: () => void;
 }
 
+/** Answers for one resource at a time: a header refresh must not walk every file. */
+export interface ReviewMultiDiffHeaderSource {
+	entry(uris: { readonly original: URI | undefined; readonly modified: URI | undefined }): ReviewMultiDiffHeaderEntry | undefined;
+	section(id: string): ReviewDiffSection | undefined;
+}
+
 export class ReviewMultiDiffUIElementFactory
   implements IWorkbenchUIElementFactory
 {
@@ -70,7 +75,7 @@ export class ReviewMultiDiffUIElementFactory
 	}
 
   constructor(
-    private readonly entries: () => readonly ReviewMultiDiffHeaderEntry[],
+    private readonly source: ReviewMultiDiffHeaderSource,
     readonly horizontalScrollbar: "auto" | "hidden",
     readonly overflowWidgetsDomNode: HTMLElement | undefined,
     readonly hideResourceHeader = false,
@@ -81,7 +86,7 @@ export class ReviewMultiDiffUIElementFactory
   ) {}
 
 	isResourceCollapseLocked(uris: Parameters<IResourceHeaderMetadata["setUris"]>[0]): boolean {
-		return !!uris && !!this.entries().find(entry => sameResource(entry.original, uris.original) && sameResource(entry.modified, uris.modified))?.collapseLocked;
+		return !!uris && !!this.source.entry(uris)?.collapseLocked;
 	}
 
 	getResourceSectionId(uris: Parameters<IResourceHeaderMetadata["setUris"]>[0]): string | undefined {
@@ -98,10 +103,8 @@ export class ReviewMultiDiffUIElementFactory
 		const countsTooltip = new ReviewTooltip(this.hoverService, counts);
 		const viewed = new ReviewViewedCheckbox(this.hoverService, element.ownerDocument, () => current?.onToggleSection?.());
 		const refresh = () => {
-			const entry = current = uris && this.entries().find(entry => sameResource(entry.original, uris!.original) && sameResource(entry.modified, uris!.modified));
-			const section = sticky && entry?.sectionId
-				? this.entries().find(candidate => candidate.sectionId === entry.sectionId && candidate.section)?.section
-				: entry?.section;
+			const entry = current = uris && this.source.entry(uris);
+			const section = sticky && entry?.sectionId ? this.source.section(entry.sectionId) : entry?.section;
 			bodyHidden.set(entry?.sectionCollapsed ?? false, undefined);
 			element.replaceChildren(); element.className = 'review-diff-group'; element.hidden = !section;
 			height.set(section ? 48 : 0, undefined);
@@ -208,13 +211,7 @@ export class ReviewMultiDiffUIElementFactory
 
 		const setUris: IResourceHeaderMetadata["setUris"] = (uris) => {
 			lastUris = uris;
-        current = uris
-          ? this.entries().find(
-              (entry) =>
-                sameResource(entry.original, uris.original) &&
-                sameResource(entry.modified, uris.modified),
-            )
-          : undefined;
+        current = uris ? this.source.entry(uris) : undefined;
         element.hidden = !current;
         if (!current) return;
         const hasCounts =
@@ -270,12 +267,6 @@ export class ReviewMultiDiffUIElementFactory
       },
     };
   }
-}
-
-function sameResource(left: URI | undefined, right: URI | undefined): boolean {
-  return left === undefined
-    ? right === undefined
-    : !!right && isEqual(left, right);
 }
 
 export function reviewMultiDiffLabelUris(file: ReviewDiffFileWire): {

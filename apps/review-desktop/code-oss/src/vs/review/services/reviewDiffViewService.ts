@@ -411,18 +411,20 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 		const rendered = new Set<string>();
 		const renderCurrentState = (change?: StructuralSessionChange) => {
 			if (this.disposed) return;
-			for (const entry of entries) {
-				const path = entry.file.path;
-				if (change && !change.files.has(path)) continue;
-				const result = entry.file.status === "unchanged" ? {} : session.getFileResult(path);
-				if (!result) continue;
-				if (!rendered.has(path) && result.hidden !== undefined) view.hideFile(path, result.hidden);
-				rendered.add(path);
-				if (result.diff) view.fileCounts(path, reviewFileCounts(result.diff));
-				view.fileLoaded(path, result.error);
-			}
-			if (session.error) view.loadingFailed(session.error);
-			else if (session.complete) view.loadingFailed("diffr did not supply a result for this file.");
+			view.batch(() => {
+				for (const entry of entries) {
+					const path = entry.file.path;
+					if (change && !change.files.has(path)) continue;
+					const result = entry.file.status === "unchanged" ? {} : session.getFileResult(path);
+					if (!result) continue;
+					if (!rendered.has(path) && result.hidden !== undefined) view.hideFile(path, result.hidden);
+					rendered.add(path);
+					if (result.diff) view.fileCounts(path, reviewFileCounts(result.diff));
+					view.fileLoaded(path, result.error);
+				}
+				if (session.error) view.loadingFailed(session.error);
+				else if (session.complete) view.loadingFailed("diffr did not supply a result for this file.");
+			});
 		};
 		store.add(session.onDidChange(renderCurrentState));
 		renderCurrentState();

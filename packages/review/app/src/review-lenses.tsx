@@ -350,7 +350,10 @@ export function ReviewLensesProvider({
               ? source.comparison
               : undefined;
 
-          groups.set(key, [...(groups.get(key) ?? []), source]);
+          const group = groups.get(key);
+
+          if (group) group.push(source);
+          else groups.set(key, [source]);
         }
 
         return mergeCoverageProgress(

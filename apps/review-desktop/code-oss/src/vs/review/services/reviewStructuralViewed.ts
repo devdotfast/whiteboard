@@ -19,7 +19,7 @@ export class StructuralViewedState extends Disposable {
 	readonly onDidChange = this.changed.event;
 	private readonly scopes = new Map<string, ReturnType<typeof structuralViewedScopes>>();
 	private readonly states = new Map<string, string>();
-	private memo: { files: Map<string, ReviewDiffProgressFile>; values: Map<string, ReturnType<typeof structuralViewedProgress>> } | undefined;
+	private memo: { files: Map<string, ReviewDiffProgressFile>; values: Map<string, Map<number, ReturnType<typeof structuralViewedProgress>>> } | undefined;
 
 	constructor(
 		private readonly session: StructuralDiffSession,
@@ -28,11 +28,11 @@ export class StructuralViewedState extends Disposable {
 		onProgress: Event<void>,
 	) {
 		super();
-		const reset = () => { this.memo = undefined; this.sync(); };
-		this._register(onProgress(reset));
+		this._register(onProgress(() => { this.memo = undefined; this.sync(); }));
+		// A streamed batch changes only its own files; the rest keep their scopes and progress.
 		this._register(session.onDidChange(change => {
-			for (const path of change.files) this.scopes.delete(path);
-			reset();
+			for (const path of change.files) { this.scopes.delete(path); this.memo?.values.delete(path); }
+			this.sync(change.files);
 		}));
 		this.sync();
 	}
@@ -49,9 +49,10 @@ export class StructuralViewedState extends Disposable {
 
 	get(path: string, id: number) {
 		const { files, values } = this.current();
-		const key = `${path}:${id}`;
-		let value = values.get(key);
-		if (!value) values.set(key, value = structuralViewedProgress(this.getScopes(path)?.get(id) ?? [], files.get(path)));
+		let ofFile = values.get(path);
+		if (!ofFile) values.set(path, ofFile = new Map());
+		let value = ofFile.get(id);
+		if (!value) ofFile.set(id, value = structuralViewedProgress(this.getScopes(path)?.get(id) ?? [], files.get(path)));
 		return value;
 	}
 
@@ -63,11 +64,12 @@ export class StructuralViewedState extends Disposable {
 		return this.memo ??= { files: new Map(this.progress()?.files.map(file => [file.path, file])), values: new Map() };
 	}
 
-	private sync(): void {
+	private sync(paths?: ReadonlySet<string>): void {
 		const initialized = initializedScopes.get(this.session) ?? new Set<string>();
 		initializedScopes.set(this.session, initialized);
 		for (const entry of this.entries) {
 			const path = entry.file.path;
+			if (paths && !paths.has(path)) continue;
 			if (!this.current().files.has(path)) continue;
 			const scopes = this.getScopes(path);
 			const viewed = [...scopes ?? []].filter(([id]) => this.get(path, id).state === 'viewed');

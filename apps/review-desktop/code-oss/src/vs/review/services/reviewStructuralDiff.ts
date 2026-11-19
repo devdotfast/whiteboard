@@ -53,7 +53,7 @@ export function createStructuralDiffEditors(
 	const languages = instantiation.invokeFunction((a) => a.get(ILanguageService));
 	const viewId = ++structuralViewId;
 	const sources = new Map<string, { path: string; side: "lhs" | "rhs"; unchangedBase?: URI }>();
-	const snapshots = new Map<string, URI>();
+	const snapshots = new Map<string, { uri: URI; path: string; side: "lhs" | "rhs" }>();
 	const unchangedTexts = new Map<string, Promise<string>>();
 	const snapshotUri = (uri: URI, path: string, side: "lhs" | "rhs", unchangedBase?: URI) => {
 		const query = new URLSearchParams(uri.query);
@@ -85,7 +85,7 @@ export function createStructuralDiffEditors(
 				// diffr's binary check is stricter than git's.
 				text = result.diff?.type === "text" ? result.diff[source.side]?.text ?? "" : "";
 			}
-			if (!source.unchangedBase) snapshots.set(uri.toString(), uri);
+			if (!source.unchangedBase) snapshots.set(uri.toString(), { uri, path: source.path, side: source.side });
 			return modelService.getModel(uri) ?? modelService.createModel(text, languages.createByFilepathOrFirstLine(uri, text.split("\n", 1)[0]), uri);
 		},
 	}));
@@ -104,11 +104,10 @@ export function createStructuralDiffEditors(
 	const willEdit = lifetime.add(new Emitter<void>());
 	lifetime.add(session.onDidChange(change => {
 		// A refreshed diff edits its snapshots before any diff is recomputed against them.
-		const edits = [...snapshots.values()].flatMap(uri => {
-			const source = sources.get(uri.with({ fragment: "" }).toString())!;
-			const diff = change.files.has(source.path) ? session.getFileResult(source.path)?.diff : undefined;
+		const edits = [...snapshots.values()].flatMap(({ uri, path, side }) => {
+			const diff = change.files.has(path) ? session.getFileResult(path)?.diff : undefined;
 			const model = diff && modelService.getModel(uri);
-			return model ? [{ model, text: diff.type === "text" ? diff[source.side]?.text ?? "" : "" }] : [];
+			return model ? [{ model, text: diff.type === "text" ? diff[side]?.text ?? "" : "" }] : [];
 		});
 		if (edits.length) willEdit.fire();
 		for (const { model, text } of edits) replaceText(model, text);

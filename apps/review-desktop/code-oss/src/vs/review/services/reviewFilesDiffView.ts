@@ -12,12 +12,12 @@ import { disposableTimeout } from "../../base/common/async.js";
 import { Emitter, Event } from "../../base/common/event.js";
 import { Disposable, DisposableStore, MutableDisposable, toDisposable } from "../../base/common/lifecycle.js";
 import { autorun, observableFromEvent, observableValue, type ISettableObservable } from "../../base/common/observable.js";
-import { isEqual } from "../../base/common/resources.js";
+import { getComparisonKey } from "../../base/common/resources.js";
 import { URI } from "../../base/common/uri.js";
 import { ElementSizeObserver } from "../../editor/browser/config/elementSizeObserver.js";
 import { isDiffEditor, type IDiffEditor } from "../../editor/browser/editorBrowser.js";
 import { DiffEditorViewModel } from "../../editor/browser/widget/diffEditor/diffEditorViewModel.js";
-import { MultiDiffEditorViewModel } from "../../editor/browser/widget/multiDiffEditor/multiDiffEditorViewModel.js";
+import { MultiDiffEditorViewModel, type DocumentDiffItemViewModel } from "../../editor/browser/widget/multiDiffEditor/multiDiffEditorViewModel.js";
 import { MultiDiffEditorWidget, type RevealOptions } from "../../editor/browser/widget/multiDiffEditor/multiDiffEditorWidget.js";
 import type { IMultiDiffEditorViewState } from "../../editor/browser/widget/multiDiffEditor/multiDiffEditorWidgetImpl.js";
 import { IDiffEditorOptions } from "../../editor/common/config/editorOptions.js";
@@ -40,7 +40,7 @@ import { type ReviewDiffFileWire } from "../common/reviewProtocol.js";
 import { binarySizeLabel, isBinaryCounts, type ReviewFileCounts } from "../common/reviewStructuralDiff.js";
 import type { DiffFindFolds } from "./reviewDiffFind.js";
 import type { ReviewDiffLayoutSetting } from "./reviewDiffLayout.js";
-import { reviewMultiDiffLabelUris, ReviewMultiDiffUIElementFactory } from "./reviewMultiDiff.js";
+import { reviewMultiDiffLabelUris, ReviewMultiDiffUIElementFactory, type ReviewMultiDiffHeaderEntry } from "./reviewMultiDiff.js";
 import type { StructuralDiffSession } from "./reviewStructuralDiffSession.js";
 
 const FILE_TREE_MINIMUM_WIDTH = 180;
@@ -194,6 +194,11 @@ export class ReviewFilesDiffView extends Disposable {
 	private pendingViewState: IMultiDiffEditorViewState | undefined;
 	private viewModel: MultiDiffEditorViewModel | undefined;
 	private input: ReviewFilesEditorInput | undefined;
+	/** The input's entries by resource; the first of a repeated resource wins, as a scan would find it. */
+	private entriesByResource = new Map<string, ReviewFilesEditorEntry>();
+	private itemsByResource: { items: readonly DocumentDiffItemViewModel[]; map: Map<string, DocumentDiffItemViewModel> } | undefined;
+	/** Whole-list work a batch of streamed files owes once it ends. */
+	private batched: { ready?: boolean; headers?: boolean; summary?: boolean } | undefined;
 	private readonly readyFiles = new Set<string>();
 	private readonly loadingFiles = new Set<string>();
 	private readonly failedFiles = new Map<string, string>();
@@ -231,7 +236,7 @@ export class ReviewFilesDiffView extends Disposable {
 		private readonly onToggleViewed: ((path: string, sectionId?: string) => void) | undefined,
 		private readonly onToggleSection: ((id: string) => void) | undefined,
 		private readonly document: ReviewDiffViewSpec["document"],
-		openFile: boolean,
+		private readonly openFile: boolean,
 		private readonly onscreen: ISettableObservable<boolean> | undefined,
 		@IInstantiationService
 		private readonly reviewInstantiationService: IInstantiationService,
@@ -251,45 +256,13 @@ export class ReviewFilesDiffView extends Disposable {
 
 		const factory = this.reviewInstantiationService.createInstance(
 			ReviewMultiDiffUIElementFactory,
-			() =>
-				this.input
-					? this.input.entries.map((entry) => ({
-							original: entry.original,
-							modified: entry.modified,
-							additions: entry.file.status === "unchanged" || this.isBinary(entry) ? undefined : this.entryProgress(entry)?.remaining.additions ?? (this.fileTreeContainer || this.document ? undefined : this.lineCounts(entry.file.path)?.added),
-							deletions: entry.file.status === "unchanged" || this.isBinary(entry) ? undefined : this.entryProgress(entry)?.remaining.deletions ?? (this.fileTreeContainer || this.document ? undefined : this.lineCounts(entry.file.path)?.removed),
-							collapseLocked: this.isBinary(entry) || this.failedFiles.has(entry.file.path),
-						countsTooltip: this.progressTooltip(entry) ?? this.streamStats.get(entry.file.path)?.tooltip,
-						viewedState: this.entryProgress(entry)?.state,
-						viewedScope: this.viewedScope,
-						onToggleViewed: entry.file.status !== "unchanged" && this.onToggleViewed ? () => this.onToggleViewed!(entry.file.path, entry.sectionId) : undefined,
-						sectionId: entry.sectionId,
-						sectionCollapsed: !!entry.sectionId && this.collapsedSections.has(entry.sectionId),
-						onToggleSectionCollapsed: () => { if (entry.sectionId) { if (this.collapsedSections.has(entry.sectionId)) this.collapsedSections.delete(entry.sectionId); else this.collapsedSections.add(entry.sectionId); this.headerFactory.refreshHeaders(); } },
-						section: entry.sectionStart ? this.progress?.sections?.find(section => section.id === entry.sectionId) : undefined,
-						onToggleSection: () => entry.sectionId && this.onToggleSection?.(entry.sectionId),
-						// A binary is folded like a hidden file, with its size as the reason.
-						note: this.failedFiles.get(entry.file.path) ?? (entry.file.status === "unchanged" ? (this.document ? undefined : "Unchanged") : this.isBinary(entry) ? this.binaryNote(entry.file.path) : this.hiddenFiles.get(entry.file.path)),
-						noteTooltip: this.failedFiles.has(entry.file.path) ? { label: this.failedFiles.get(entry.file.path)! } : this.isBinary(entry) ? { label: "No text to show · binary files stay folded" } : undefined,
-						failed: this.failedFiles.has(entry.file.path),
-						commit: document?.commit,
-							// A binary has no text to open.
-							onDidOpen: this.isBinary(entry) || !(document ? document.onDidOpen : openFile) ? undefined : () => {
-								if (document?.onDidOpen) { document.onDidOpen(); return; }
-								const target = this.widget.tryGetCodeEditor(entry.goToFileResource);
-								const change = isDiffEditor(target?.diffEditor) ? target.diffEditor.getDiffComputationResult()?.changes2[0] : undefined;
-								const line = change && (entry.modified ? change.modified : change.original).startLineNumber;
-								const selection = line === undefined ? undefined : target?.editor.getModel()?.validateRange(new Range(line, 1, line, 1));
-								void this.editorService.openEditor(
-									{
-										resource: entry.goToFileResource,
-										options: { pinned: true, revealIfVisible: true, selection },
-									},
-									this.editorGroupService.mainPart.activeGroup,
-								);
-							},
-						}))
-					: [],
+			{
+				entry: uris => {
+					const entry = this.entriesByResource.get(resourceKey(uris));
+					return entry && this.headerEntry(entry);
+				},
+				section: id => this.progress?.sections?.find(section => section.id === id),
+			},
 			"auto",
 			// Hover and definition widgets must escape the canvas root, whose
 			// container-query containment clips position: fixed descendants.
@@ -392,11 +365,56 @@ export class ReviewFilesDiffView extends Disposable {
 		this._register(toDisposable(() => this.root.remove()));
 	}
 
+	private headerEntry(entry: ReviewFilesEditorEntry): ReviewMultiDiffHeaderEntry {
+		const document = this.document;
+		return {
+			original: entry.original,
+			modified: entry.modified,
+			additions: entry.file.status === "unchanged" || this.isBinary(entry) ? undefined : this.entryProgress(entry)?.remaining.additions ?? (this.fileTreeContainer || this.document ? undefined : this.lineCounts(entry.file.path)?.added),
+			deletions: entry.file.status === "unchanged" || this.isBinary(entry) ? undefined : this.entryProgress(entry)?.remaining.deletions ?? (this.fileTreeContainer || this.document ? undefined : this.lineCounts(entry.file.path)?.removed),
+			collapseLocked: this.isBinary(entry) || this.failedFiles.has(entry.file.path),
+			countsTooltip: this.progressTooltip(entry) ?? this.streamStats.get(entry.file.path)?.tooltip,
+			viewedState: this.entryProgress(entry)?.state,
+			viewedScope: this.viewedScope,
+			onToggleViewed: entry.file.status !== "unchanged" && this.onToggleViewed ? () => this.onToggleViewed!(entry.file.path, entry.sectionId) : undefined,
+			sectionId: entry.sectionId,
+			sectionCollapsed: !!entry.sectionId && this.collapsedSections.has(entry.sectionId),
+			onToggleSectionCollapsed: () => { if (entry.sectionId) { if (this.collapsedSections.has(entry.sectionId)) this.collapsedSections.delete(entry.sectionId); else this.collapsedSections.add(entry.sectionId); this.headerFactory.refreshHeaders(); } },
+			section: entry.sectionStart ? this.progress?.sections?.find(section => section.id === entry.sectionId) : undefined,
+			onToggleSection: () => entry.sectionId && this.onToggleSection?.(entry.sectionId),
+			// A binary is folded like a hidden file, with its size as the reason.
+			note: this.failedFiles.get(entry.file.path) ?? (entry.file.status === "unchanged" ? (this.document ? undefined : "Unchanged") : this.isBinary(entry) ? this.binaryNote(entry.file.path) : this.hiddenFiles.get(entry.file.path)),
+			noteTooltip: this.failedFiles.has(entry.file.path) ? { label: this.failedFiles.get(entry.file.path)! } : this.isBinary(entry) ? { label: "No text to show · binary files stay folded" } : undefined,
+			failed: this.failedFiles.has(entry.file.path),
+			commit: document?.commit,
+			// A binary has no text to open.
+			onDidOpen: this.isBinary(entry) || !(document ? document.onDidOpen : this.openFile) ? undefined : () => {
+				if (document?.onDidOpen) { document.onDidOpen(); return; }
+				const target = this.widget.tryGetCodeEditor(entry.goToFileResource);
+				const change = isDiffEditor(target?.diffEditor) ? target.diffEditor.getDiffComputationResult()?.changes2[0] : undefined;
+				const line = change && (entry.modified ? change.modified : change.original).startLineNumber;
+				const selection = line === undefined ? undefined : target?.editor.getModel()?.validateRange(new Range(line, 1, line, 1));
+				void this.editorService.openEditor(
+					{
+						resource: entry.goToFileResource,
+						options: { pinned: true, revealIfVisible: true, selection },
+					},
+					this.editorGroupService.mainPart.activeGroup,
+				);
+			},
+		};
+	}
+
 	async setInput(input: ReviewFilesEditorInput, viewState: IMultiDiffEditorViewState | undefined): Promise<void> {
 		this.settleHold.clear();
 		this.documentLayout.clear();
 		this.pendingViewState = viewState;
 		this.input = input;
+		this.entriesByResource = new Map();
+		for (const entry of input.entries) {
+			const key = resourceKey(entry);
+			if (!this.entriesByResource.has(key)) this.entriesByResource.set(key, entry);
+		}
 		this.changedFilesTree?.setFiles(Array.from(new Map(input.entries.map(entry => [entry.file.path, entry.file])).values()));
 		const viewModel = await input.getViewModel();
 		if (this._store.isDisposed) return;
@@ -407,7 +425,7 @@ export class ReviewFilesDiffView extends Disposable {
 			this.documentLayout.value = autorun(reader => {
 				const items = viewModel.items.read(reader);
 				const onePane = items.length > 0 && items.every(item => {
-					const entry = input.entries.find(entry => sameResource(item.originalUri, entry.original) && sameResource(item.modifiedUri, entry.modified));
+					const entry = this.entriesByResource.get(itemKey(item));
 					if (!entry || entry.file.binary) return false;
 					if (entry.file.status === "added" || entry.file.status === "deleted" || entry.file.status === "unchanged") return true;
 					const comparison = item.diffEditorViewModel;
@@ -433,18 +451,11 @@ export class ReviewFilesDiffView extends Disposable {
 					item.collapsed.set(this.documentCollapsed, undefined);
 				}
 				this.applyViewedFiles();
-				const entry = this.input?.entries.find(
-					(e) => e.file.path === this.pendingPath,
-				);
-				if (!entry || !this.readyFiles.has(entry.file.path)) return;
-				if (
-					!items.some(
-						(item) =>
-							sameResource(item.originalUri, entry.original) &&
-							sameResource(item.modifiedUri, entry.modified),
-					)
-				)
-					return;
+				const pending = this.pendingPath;
+				if (pending === undefined || !this.readyFiles.has(pending)) return;
+				const entry = this.input?.entries.find((e) => e.file.path === pending);
+				if (!entry) return;
+				if (!this.itemFor(entry)) return;
 				this.pendingPath = undefined;
 				this.showStreamStatus();
 				queueMicrotask(() => {
@@ -514,11 +525,31 @@ export class ReviewFilesDiffView extends Disposable {
 		if (error) this.failedFiles.set(path, error);
 		else this.failedFiles.delete(path);
 		this.changedFilesTree?.setFileState(path, error ? "error" : undefined, error);
-		this.input?.setReadyFiles(this.readyFiles, this.loadingFiles.size > 0);
+		if (this.batched) this.batched.ready = true;
+		else this.input?.setReadyFiles(this.readyFiles, this.loadingFiles.size > 0);
 		this.showStreamStatus();
 	}
 
-	refreshHeaders(): void { this.headerFactory.refreshHeaders(); }
+	/**
+	 * Files stream in many at a time, and a finished comparison reports them all
+	 * at once. Each one owes work over the whole list — the ready set, live
+	 * headers, the summary — so a batch does that work once, not once per file.
+	 */
+	batch(update: () => void): void {
+		if (this.batched) { update(); return; }
+		const batched: NonNullable<ReviewFilesDiffView["batched"]> = this.batched = {};
+		try { update(); } finally {
+			this.batched = undefined;
+			if (batched.ready) this.input?.setReadyFiles(this.readyFiles, this.loadingFiles.size > 0);
+			if (batched.headers) this.headerFactory.refreshHeaders();
+			if (batched.summary) this.renderSummary();
+		}
+	}
+
+	refreshHeaders(): void {
+		if (this.batched) this.batched.headers = true;
+		else this.headerFactory.refreshHeaders();
+	}
 
 	/** Coverage counts are independent of fold state. */
 	fileCounts(path: string, counts: ReviewFileCounts): void {
@@ -529,8 +560,9 @@ export class ReviewFilesDiffView extends Disposable {
 		});
 		// Coverage owns line counts in a hosted tree; a binary's size has no other source.
 		if (!this.fileTreeContainer || isBinaryCounts(counts)) this.changedFilesTree?.setCounts(path, counts);
-		this.headerFactory.refreshHeaders();
-		this.renderSummary();
+		this.refreshHeaders();
+		if (this.batched) this.batched.summary = true;
+		else this.renderSummary();
 	}
 
 	private lineCounts(path: string) {
@@ -574,7 +606,7 @@ export class ReviewFilesDiffView extends Disposable {
 	/** The root's default-collapse reason, displayed on its file header. */
 	hideFile(path: string, label: string): void {
 		this.hiddenFiles.set(path, label);
-		this.headerFactory.refreshHeaders();
+		this.refreshHeaders();
 	}
 
 	private readonly collapsedSections = new Set<string>();
@@ -670,7 +702,7 @@ export class ReviewFilesDiffView extends Disposable {
 	}
 
 	loadingFailed(message: string): void {
-		for (const path of this.loadingFiles) this.fileLoaded(path, message);
+		this.batch(() => { for (const path of this.loadingFiles) this.fileLoaded(path, message); });
 		this.showStreamStatus();
 	}
 
@@ -762,18 +794,26 @@ export class ReviewFilesDiffView extends Disposable {
 	}
 
 	private itemFor(resource: { original: URI | undefined; modified: URI | undefined }) {
-		return this.viewModel?.items.get().find(item => sameResource(item.originalUri, resource.original) && sameResource(item.modifiedUri, resource.modified));
+		const items = this.viewModel?.items.get();
+		if (!items) return undefined;
+		// Every streamed file replaces the list; index each list once, not once per lookup.
+		if (this.itemsByResource?.items !== items) {
+			const map = new Map<string, DocumentDiffItemViewModel>();
+			for (const item of items) {
+				const key = itemKey(item);
+				if (!map.has(key)) map.set(key, item);
+			}
+			this.itemsByResource = { items, map };
+		}
+		return this.itemsByResource.map.get(resourceKey(resource));
 	}
 
 	private syncFileSelectionFromWidget(): void {
 		const resource = this.widget.getActiveItem();
 		const input = this.input;
 		if (!resource || !input || this.pendingPath) return;
-		const index = input.entries.findIndex(
-			(entry) => sameResource(entry.original, resource.original) && sameResource(entry.modified, resource.modified),
-		);
-		if (index === -1) return;
-		this.changedFilesTree?.setActiveFile(input.entries[index].file.path);
+		const entry = this.entriesByResource.get(resourceKey(resource));
+		if (entry) this.changedFilesTree?.setActiveFile(entry.file.path);
 	}
 }
 export interface RevealSourceOptions {
@@ -781,6 +821,20 @@ export interface RevealSourceOptions {
 	select?: boolean;
 }
 
-function sameResource(left: URI | undefined, right: URI | undefined): boolean {
-	return left === undefined ? right === undefined : !!right && isEqual(left, right);
+const comparisonKeys = new WeakMap<URI, string>();
+
+/** The key `isEqual` compares by, computed once per URI: deriving it encodes the URI anew. */
+function comparisonKey(uri: URI | undefined): string {
+	if (!uri) return "";
+	let key = comparisonKeys.get(uri);
+	if (key === undefined) comparisonKeys.set(uri, key = getComparisonKey(uri));
+	return key;
+}
+
+function resourceKey(resource: { readonly original: URI | undefined; readonly modified: URI | undefined }): string {
+	return `${comparisonKey(resource.original)}\n${comparisonKey(resource.modified)}`;
+}
+
+function itemKey(item: DocumentDiffItemViewModel): string {
+	return resourceKey({ original: item.originalUri, modified: item.modifiedUri });
 }
