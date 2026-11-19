@@ -35,7 +35,15 @@ import { AskThreads } from "@review/ask/threads.js";
 import { createGlobalReviewServer } from "@review/server/desktop-server.js";
 import { Hono } from "hono";
 import sharp from "sharp";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 
 import {
   type AuthoringTool,
@@ -3591,7 +3599,7 @@ it("does not report clean tracked symlinks and submodules as modified", async ()
   });
 });
 
-it("continues capturing after watchers fail and stop emitting changes", async () => {
+it("keeps capturing after watchers fail without reinspecting on every refresh", async () => {
   await local.data.close();
   await local.store.close();
   const callbacks: SubscribeCallback[] = [];
@@ -3606,7 +3614,7 @@ it("continues capturing after watchers fail and stop emitting changes", async ()
   const created = await local.store.execute(
     command({
       type: "create",
-      title: "Watcher recovery",
+      title: "Watcher failure",
       target: {
         kind: "worktree",
         repositoryId: pins.repositoryId,
@@ -3615,22 +3623,39 @@ it("continues capturing after watchers fail and stop emitting changes", async ()
     }),
   );
 
+  // An inspection made before the failure is reused for a while.
+  const now = performance.now.bind(performance);
+  let skipped = 0;
+
+  const clock = vi
+    .spyOn(performance, "now")
+    .mockImplementation(() => now() + skipped);
+
+  onTestFinished(() => clock.mockRestore());
+
   for (const callback of callbacks)
     callback(new Error("No space left on device"), []);
 
-  for (const value of ["first change\n", "second change\n"]) {
-    writeFileSync(path.join(repository, "example.ts"), value);
-    await local.store.refreshWorktrees();
-    expect(
-      (
-        await local.data.file(
-          local.store.read(created.reviewId).pins!,
-          "head",
-          "example.ts",
-        )
-      ).text,
-    ).toBe(value);
-  }
+  writeFileSync(path.join(repository, "example.ts"), "changed\n");
+  skipped += 60_000;
+  await local.store.refreshWorktrees();
+  expect(
+    (
+      await local.data.file(
+        local.store.read(created.reviewId).pins!,
+        "head",
+        "example.ts",
+      )
+    ).text,
+  ).toBe("changed\n");
+
+  // The new watchers may still report the write.
+  await watcherLatency();
+  await local.store.refreshWorktrees();
+  recordSpawns();
+
+  for (let i = 0; i < 5; i++) await local.store.refreshWorktrees();
+  expect(spawns.filter((args) => args.includes("ls-files"))).toHaveLength(0);
 });
 
 it("keeps live language identity across edits but replaces it with a checkout at the same path", async () => {

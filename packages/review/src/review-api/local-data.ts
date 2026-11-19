@@ -181,6 +181,9 @@ const PULL_REQUEST_STATE_TTL_MS = 5 * 60_000;
 /** How many PR states are read from GitHub at once. */
 const PULL_REQUEST_STATE_READS = 2;
 
+/** How long an inspection of a worktree with a failed watcher is reused. */
+const UNWATCHED_INSPECTION_MS = 10_000;
+
 /** Local source/resource boundary, including Desktop-only local language context. */
 
 export class LocalReviewData {
@@ -685,8 +688,12 @@ export class LocalReviewData {
       epoch: number;
       inspectedEpoch: number;
       subscriptions: Map<string, AsyncSubscription>;
-      healthy: boolean;
+      /** Subscribes to each watched root. Unset until the first attempt ends. */
+      watchers?: Map<string, () => Promise<void>>;
+      /** Shared by concurrent reads that find a watcher missing. */
+      rewatching?: Promise<unknown>;
       inspection?: Omit<Awaited<ReturnType<typeof inspectWorktree>>, "files">;
+      inspectedAt: number;
       tracked?: Set<string>;
       /** Rereads ignored directories after one may have appeared. */
       ignoring?: NodeJS.Timeout;
@@ -710,7 +717,7 @@ export class LocalReviewData {
         epoch: 0,
         inspectedEpoch: -1,
         subscriptions: new Map(),
-        healthy: true,
+        inspectedAt: 0,
         forks: new Map(),
       };
       this.worktrees.set(repositoryId, entry);
@@ -730,16 +737,25 @@ export class LocalReviewData {
         ignore: string[],
         matters: (name: string, event: WatcherEvent) => boolean,
       ) => {
+        let subscription: AsyncSubscription | undefined;
+
         try {
-          const subscription = await (
+          subscription = await (
             this.options.subscribe ??
             (await import("@parcel/watcher")).subscribe
           )(
             root,
             (error, events) => {
               if (error) {
-                state.healthy = false;
                 const failed = state.subscriptions.get(root);
+
+                // A replaced subscription can still report late.
+                if (subscription && failed !== subscription) return;
+
+                // The next read of a stale inspection subscribes again.
+                console.warn(
+                  `Worktree watcher failed for ${root}: ${error.message}`,
+                );
 
                 if (failed) void release(failed);
                 state.subscriptions.delete(root);
@@ -762,8 +778,10 @@ export class LocalReviewData {
           state.subscriptions.set(root, subscription);
 
           if (previous) void release(previous);
-        } catch {
-          state.healthy = false;
+        } catch (error) {
+          // Later attempts follow a failure that was already logged.
+          if (!state.watchers)
+            console.warn(`Cannot watch worktree at ${root}: ${String(error)}`);
         }
       };
 
@@ -811,9 +829,12 @@ export class LocalReviewData {
         return prefix === null || rootEventMatters(name, state.tracked);
       };
 
-      await Promise.all([
-        watch(vcs.rootPath, ignored, rootMatters),
-        common &&
+      const watchers = new Map([
+        [vcs.rootPath, () => watch(vcs.rootPath, ignored, rootMatters)],
+      ]);
+
+      if (common)
+        watchers.set(common, () =>
           watch(
             common,
             INERT_GIT_PATHS.map((directory) => path.join(common, directory)),
@@ -823,22 +844,45 @@ export class LocalReviewData {
               return prefix === null || gitEventMatters(name, prefix);
             },
           ),
-      ]);
+        );
+
+      await Promise.all([...watchers.values()].map((subscribe) => subscribe()));
+      state.watchers = watchers;
     }
 
+    const worktree = entry;
+
+    const unwatched = [...(worktree.watchers ?? [])].filter(
+      ([root]) => !worktree.subscriptions.has(root),
+    );
+
+    // A watched worktree is inspected again once an event changes the epoch.
+    // Without a watcher nothing reports changes, so an inspection is only
+    // good for a while: it stats every tracked file, so not on every read.
     if (
-      entry.inspection &&
-      entry.inspectedEpoch === entry.epoch &&
-      entry.healthy &&
-      entry.subscriptions.size
+      worktree.inspection &&
+      (worktree.watchers && !unwatched.length
+        ? worktree.inspectedEpoch === worktree.epoch
+        : performance.now() - worktree.inspectedAt < UNWATCHED_INSPECTION_MS)
     )
-      return { ...entry.inspection, forks: entry.forks };
+      return { ...worktree.inspection, forks: worktree.forks };
+
+    // Subscribing before inspecting leaves no gap for a change to fall in.
+    if (unwatched.length) {
+      worktree.rewatching ??= Promise.all(
+        unwatched.map(([, subscribe]) => subscribe()),
+      ).finally(() => {
+        worktree.rewatching = undefined;
+      });
+      await worktree.rewatching;
+    }
 
     const epoch = entry.epoch;
     const { files, ...inspected } = await inspectWorktree(repositoryId, vcs);
     entry.inspection = inspected;
     entry.tracked = trackedDirectories(files);
     entry.inspectedEpoch = epoch;
+    entry.inspectedAt = performance.now();
     entry.forks = new Map();
 
     return { ...inspected, forks: entry.forks };
