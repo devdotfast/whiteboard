@@ -128,51 +128,38 @@ export function ReviewDiffView({
   const [lensTree, setLensTree] = useState<HTMLDivElement | null>(null);
   const [scopeTree, setScopeTree] = useState<HTMLDivElement | null>(null);
 
-  const fullProgress = useMemo(
-    () =>
-      lenses?.progress
-        ? {
-            files: lenses.progress.files.map((file) => ({
-              path: file.path,
-              ...coverageProgress([file]),
-              viewedRanges: coverageSources(file),
-              changedRanges: coverageSources(file, file.changed),
-              unfoldRanges: lenses.unfoldRanges.filter(
-                (source) =>
-                  source.file ===
-                  (source.side === "base"
-                    ? (file.previousPath ?? file.path)
-                    : file.path),
-              ),
-            })),
-            changedPaths: lenses.changedPaths,
-          }
-        : undefined,
-    [lenses?.progress, lenses?.changedPaths, lenses?.unfoldRanges],
-  );
+  const fullProgress = useMemo(() => {
+    if (!lenses?.progress) return undefined;
+    const unfold = rangesByFile(lenses.unfoldRanges);
 
-  const lensProgress = useMemo(
-    () =>
-      lenses?.progress && lens
-        ? {
-            files: lenses.progress.files.map((file) => ({
-              path: file.path,
-              ...coverageProgress([file], lens.ranges),
-              viewedRanges: coverageSources(file),
-              changedRanges: coverageSources(file, file.changed),
-              unfoldRanges: lenses.unfoldRanges.filter(
-                (source) =>
-                  source.file ===
-                  (source.side === "base"
-                    ? (file.previousPath ?? file.path)
-                    : file.path),
-              ),
-            })),
-            changedPaths: lenses.changedPaths,
-          }
-        : undefined,
-    [lenses?.progress, lenses?.changedPaths, lenses?.unfoldRanges, lens],
-  );
+    return {
+      files: lenses.progress.files.map((file) => ({
+        path: file.path,
+        ...coverageProgress([file]),
+        viewedRanges: coverageSources(file),
+        changedRanges: coverageSources(file, file.changed),
+        unfoldRanges: unfold(file),
+      })),
+      changedPaths: lenses.changedPaths,
+    };
+  }, [lenses?.progress, lenses?.changedPaths, lenses?.unfoldRanges]);
+
+  const lensProgress = useMemo(() => {
+    if (!lenses?.progress || !lens) return undefined;
+    const unfold = rangesByFile(lenses.unfoldRanges);
+    const scope = rangesByFile(lens.ranges);
+
+    return {
+      files: lenses.progress.files.map((file) => ({
+        path: file.path,
+        ...coverageProgress([file], scope(file)),
+        viewedRanges: coverageSources(file),
+        changedRanges: coverageSources(file, file.changed),
+        unfoldRanges: unfold(file),
+      })),
+      changedPaths: lenses.changedPaths,
+    };
+  }, [lenses?.progress, lenses?.changedPaths, lenses?.unfoldRanges, lens]);
 
   const markFile = (path: string, scoped: boolean) => {
     const file = lenses?.progress?.files.find((file) => file.path === path);
@@ -180,13 +167,7 @@ export function ReviewDiffView({
     if (!file || !lenses) return;
 
     const sources = scoped
-      ? lens?.ranges.filter(
-          (source) =>
-            source.file ===
-            (source.side === "base"
-              ? (file.previousPath ?? file.path)
-              : file.path),
-        )
+      ? lens && rangesByFile(lens.ranges)(file)
       : coverageSources(file, file.changed);
 
     void lenses.mark(sources, lenses.stats(sources).state !== "viewed");
@@ -450,18 +431,48 @@ export function ReviewDiffView({
   );
 }
 
+type FileRange = ReviewDiffLens["ranges"][number];
+
+/**
+ * Each file's own ranges, grouped once. A large diff has thousands of files
+ * and ranges; filtering every range for every file is quadratic.
+ */
+function rangesByFile(ranges: readonly FileRange[]) {
+  const byFile = Map.groupBy(ranges, (source) => source.file);
+
+  return (file: { path: string; previousPath?: string }): FileRange[] => {
+    const base = file.previousPath ?? file.path;
+
+    const named =
+      base === file.path
+        ? (byFile.get(base) ?? [])
+        : [...(byFile.get(base) ?? []), ...(byFile.get(file.path) ?? [])];
+
+    return named.filter(
+      (source) => source.file === (source.side === "base" ? base : file.path),
+    );
+  };
+}
+
 /** How many changed files a lens covers. */
 function lensFileCount(lenses: ReviewLenses, lens: ReviewDiffLens): number {
+  // The first file with a name owns it, as a scan of the files would find it.
+  const owners = {
+    base: new Map<string, string>(),
+    head: new Map<string, string>(),
+  };
+
+  for (const file of lenses.progress?.files ?? []) {
+    const base = file.previousPath ?? file.path;
+
+    if (!owners.base.has(base)) owners.base.set(base, file.path);
+
+    if (!owners.head.has(file.path)) owners.head.set(file.path, file.path);
+  }
+
   return new Set(
     lens.ranges.map(
-      (source) =>
-        lenses.progress?.files.find(
-          (file) =>
-            source.file ===
-            (source.side === "base"
-              ? (file.previousPath ?? file.path)
-              : file.path),
-        )?.path ?? source.file,
+      (source) => owners[source.side].get(source.file) ?? source.file,
     ),
   ).size;
 }
