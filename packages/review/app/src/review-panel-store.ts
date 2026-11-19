@@ -83,6 +83,8 @@ export interface OverlayTour {
   kind?: OverlayTourKind;
   anchor: string;
   revealRequest: number;
+  /** The `selectionKey` of the stop's code to reveal, not its heading. */
+  revealCode?: string;
 }
 
 /** Which canvas view is showing and what it is scoped to. */
@@ -161,8 +163,12 @@ export interface ReviewNavigationActions {
   openOverlayTour: (
     tour: { tourId: string; kind: OverlayTourKind },
     anchor: string,
+    revealCode?: string,
   ) => void;
-  moveOverlayTour: (anchor: string, options: { reveal: boolean }) => void;
+  moveOverlayTour: (
+    anchor: string,
+    options: { reveal: boolean; code?: string },
+  ) => void;
   closeOverlayTour: () => void;
 }
 
@@ -332,7 +338,7 @@ export function createReviewPanelStore({
             anchor: stop.anchor,
             content: stop.content,
             tour: {
-              ...tour,
+              definition: tour.definition,
               revealRequest: tour.revealRequest + Number(reveal),
             },
           },
@@ -442,23 +448,26 @@ export function createReviewPanelStore({
           ? { mapFocus: { ...state.mapFocus, pending: false } }
           : state,
       ),
-    openOverlayTour: (tour, anchor) =>
+    openOverlayTour: (tour, anchor, revealCode) =>
       set((state) => ({
         overlayTour: {
           ...tour,
           anchor,
+          ...(revealCode && { revealCode }),
           // Counts on across tours: a use-case switch keeps the panel mounted.
           revealRequest: (state.overlayTour?.revealRequest ?? 0) + 1,
         },
       })),
-    moveOverlayTour: (anchor, { reveal }) =>
+    moveOverlayTour: (anchor, { reveal, code }) =>
       set((state) =>
         state.overlayTour
           ? {
               overlayTour: {
-                ...state.overlayTour,
+                tourId: state.overlayTour.tourId,
+                ...(state.overlayTour.kind && { kind: state.overlayTour.kind }),
                 anchor,
                 revealRequest: state.overlayTour.revealRequest + Number(reveal),
+                ...(code && { revealCode: code }),
               },
             }
           : state,

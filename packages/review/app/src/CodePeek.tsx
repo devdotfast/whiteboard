@@ -200,6 +200,7 @@ export function CodePeekCard({
           xstyle,
         )}
         role="status"
+        data-code-peek-key={key}
       >
         {outcome === "failed" ? "Code unavailable" : "Loading code…"}
       </section>
@@ -215,6 +216,7 @@ export function CodePeekCard({
         xstyle,
       )}
       data-code-rendering="inline-editor"
+      data-code-peek-key={key}
     >
       <DocumentCodeView
         path={source.file}
