@@ -1,4 +1,8 @@
-import { BoardIcon, PullRequestStateIcon } from "@canvas/ui/board-icons";
+import {
+  BoardIcon,
+  PullRequestNumber,
+  PullRequestStateIcon,
+} from "@canvas/ui/board-icons";
 import { CopyableText, copyText } from "@canvas/ui/copy";
 import { CrumbSeparator } from "@canvas/ui/crumbs";
 import { DisclosureChevron, disclosureStyles } from "@canvas/ui/disclosure";
@@ -1816,6 +1820,12 @@ function HomeBoardTitle({
         )}
       >
         <MatchedText text={boardTitle(review.title)} queries={queries} />
+        {review.origin?.pullRequestNumber ? (
+          <PullRequestNumber
+            number={review.origin.pullRequestNumber}
+            xstyle={styles.pullRequestNumber}
+          />
+        ) : null}
       </span>
     </button>
   );
