@@ -1,10 +1,29 @@
 import { afterEach, expect, it, vi } from "vitest";
 
-import { routeDocumentEmbedScroll } from "./document-embed-scroll";
+import {
+  WHEEL_GESTURE_REST_MS,
+  routeDocumentEmbedScroll,
+} from "./document-embed-scroll";
 
 let dispose: (() => void) | undefined;
 
-afterEach(() => dispose?.());
+afterEach(() => {
+  dispose?.();
+  vi.restoreAllMocks();
+});
+
+function wheel(deltaY: number) {
+  return new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY });
+}
+
+function mockClock() {
+  let now = 1000;
+  vi.spyOn(performance, "now").mockImplementation(() => now);
+
+  return (ms: number) => {
+    now += ms;
+  };
+}
 
 function mount(embedClass: string, inDocument = true) {
   const region = document.createElement("section");
@@ -23,7 +42,7 @@ function mount(embedClass: string, inDocument = true) {
   return { region, embed, content };
 }
 
-it.each(["sequence-diagram", "flow-diagram", "database-lens", "code-peek"])(
+it.each(["sequence-diagram", "flow-diagram"])(
   "scrolls the document vertically over %s without scrolling the embed",
   (embedClass) => {
     const { region, embed, content } = mount(embedClass);
@@ -95,8 +114,8 @@ it("leaves vertical gestures to a code peek the reader clicked into", () => {
   expect(region.scrollTop).toBe(0);
 });
 
-it("routes a diagonal tie to the document, not the code peek", () => {
-  const { region, embed, content } = mount("code-peek");
+it("routes a diagonal tie to the document, not the diagram", () => {
+  const { region, embed, content } = mount("flow-diagram");
   const embeddedWheel = vi.fn<(event: WheelEvent) => void>();
   embed.addEventListener("wheel", embeddedWheel);
   region.scrollTop = 300;
@@ -140,7 +159,7 @@ it.each([
 });
 
 it("normalizes line and page wheel deltas", () => {
-  const { region, content } = mount("code-peek");
+  const { region, content } = mount("sequence-diagram");
   content.dispatchEvent(
     new WheelEvent("wheel", {
       bubbles: true,
@@ -226,3 +245,89 @@ it.each(["sequence-diagram", "flow-diagram", "database-lens", "code-peek"])(
     expect(region.scrollTop).toBe(0);
   },
 );
+
+it.each(["database-lens", "code-peek"])(
+  "lets a gesture that starts at rest over a %s scroll it",
+  (embedClass) => {
+    const { region, embed, content } = mount(embedClass);
+    const advance = mockClock();
+    region.scrollTop = 300;
+
+    const first = wheel(120);
+    content.dispatchEvent(first);
+    advance(16);
+    const second = wheel(120);
+    content.dispatchEvent(second);
+
+    expect(first.defaultPrevented).toBe(false);
+    expect(second.defaultPrevented).toBe(false);
+    expect(region.scrollTop).toBe(300);
+    expect(embed.scrollTop).toBe(0);
+  },
+);
+
+it("keeps a gesture that started on the document on it over a code peek", () => {
+  const { region, embed, content } = mount("code-peek");
+  const advance = mockClock();
+
+  region.firstElementChild!.dispatchEvent(wheel(40));
+  advance(16);
+  const over = wheel(120);
+  content.dispatchEvent(over);
+
+  expect(over.defaultPrevented).toBe(true);
+  expect(region.scrollTop).toBe(120);
+  expect(embed.scrollTop).toBe(0);
+
+  advance(WHEEL_GESTURE_REST_MS + 1);
+  const fresh = wheel(120);
+  content.dispatchEvent(fresh);
+
+  expect(fresh.defaultPrevented).toBe(false);
+  expect(region.scrollTop).toBe(120);
+});
+
+it("scrolls the document when a code peek at rest has nothing to scroll", () => {
+  const { region, content } = mount("code-peek");
+  mockClock();
+  (content as HTMLElement).style.cssText = "height:20px;width:20px";
+
+  content.dispatchEvent(wheel(80));
+
+  expect(region.scrollTop).toBe(80);
+});
+
+it("stops a latched code peek at its edge from scrolling the document", () => {
+  const { region, embed, content } = mount("code-peek");
+  const advance = mockClock();
+  embed.scrollTop = embed.scrollHeight - embed.clientHeight;
+
+  content.dispatchEvent(wheel(-40));
+  advance(16);
+  const atEdge = wheel(120);
+  content.dispatchEvent(atEdge);
+
+  expect(atEdge.defaultPrevented).toBe(true);
+  expect(region.scrollTop).toBe(0);
+});
+
+it("lets a latched editor handle the wheel, then keeps the document still", () => {
+  const { region, embed } = mount("code-peek");
+  mockClock();
+  embed.innerHTML = `<div class="monaco-scrollable-element" style="height:100px">
+    <div class="lines" style="height:100px">Code</div>
+    <div class="scrollbar vertical"><div class="slider" style="height:40px"></div></div>
+  </div>`;
+  const lines = embed.querySelector(".lines")!;
+  let preventedWhenEditorSawIt: boolean | undefined;
+  lines.addEventListener("wheel", (event) => {
+    preventedWhenEditorSawIt = event.defaultPrevented;
+  });
+
+  const scroll = wheel(120);
+  lines.dispatchEvent(scroll);
+
+  expect(preventedWhenEditorSawIt).toBe(false);
+  expect(scroll.defaultPrevented).toBe(true);
+  expect(region.scrollTop).toBe(0);
+});
