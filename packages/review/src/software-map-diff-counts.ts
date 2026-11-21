@@ -468,11 +468,10 @@ function splitGitDiff(
 
     if (!current) continue;
 
-    // Inside a hunk, "--- " and "+++ " are removed "-- " and added "++ "
-    // lines (SQL or Lua comments), not file headers.
-    current.inHunk = line.startsWith("@@")
-      ? true
-      : current.inHunk && (line === "" || /^[ +\-\\]/.test(line));
+    // File headers only come before a file's first hunk. After "@@", a line
+    // starting "--- " or "+++ " is a removed "-- " or added "++ " line (SQL
+    // or Lua comments), not a header.
+    if (line.startsWith("@@")) current.inHunk = true;
 
     if (current.inHunk) {
       current.lines.push(line);
