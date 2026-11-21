@@ -60,6 +60,20 @@
 ([(catch_clause) (finally_clause) (else_clause) (switch_case) (switch_default)] @fold
  (#set! tag "context:scope") (#set! tag "context:clause"))
 
+; A link of a call chain (`.get(…)` on a line of its own, after another call)
+; is a scope. Chained calls nest leftwards, so no node covers one link:
+; without this, every link's arguments are bodies of the one statement around
+; the chain, and a change in one link opens them all. A link that starts
+; mid-line is left alone: its scope would start on its arguments' first line.
+(call_expression
+  function: (member_expression
+    object: [(call_expression) (new_expression)]
+    "." @fold
+    property: (_) @fold) @_callee
+  arguments: (arguments) @fold
+  (#match? @_callee "\\n\\s*\\.[^.\\n]*$")
+  (#set! tag "context:scope"))
+
 ((parenthesized_expression "(" @fold.open . (_) @fold.indent ")" @fold.close) @fold (#match? @fold "\\n") (#set! tag "context:body"))
 
 ((named_imports "{" @fold.open . (_) @fold.indent "}" @fold.close) @fold (#set! tag "context:body"))
