@@ -449,6 +449,7 @@ function splitGitDiff(
     oldFile: string | null;
     newFile: string | null;
     lines: string[];
+    inHunk: boolean;
   } | null = null;
 
   for (const line of diff.split(/\r?\n/)) {
@@ -461,11 +462,22 @@ function splitGitDiff(
         });
       }
 
-      current = { oldFile: null, newFile: null, lines: [] };
+      current = { oldFile: null, newFile: null, lines: [], inHunk: false };
       continue;
     }
 
     if (!current) continue;
+
+    // File headers only come before a file's first hunk. After "@@", a line
+    // starting "--- " or "+++ " is a removed "-- " or added "++ " line (SQL
+    // or Lua comments), not a header.
+    if (line.startsWith("@@")) current.inHunk = true;
+
+    if (current.inHunk) {
+      current.lines.push(line);
+      continue;
+    }
+
     const oldFile = parseGitFileLine(line, "--- ");
     const newFile = parseGitFileLine(line, "+++ ");
 
