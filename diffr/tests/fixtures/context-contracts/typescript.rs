@@ -1393,3 +1393,171 @@ in the saved JSON, then run diffr pprint again. Full text and children are prese
 "#
     );
 }
+
+// Contracts: call-chain-links
+#[test]
+fn changed_last_link_of_a_call_chain_folds_the_links_before_it() {
+    // Setup
+    let before = r#"export const app = new Hono()
+  .get("/route/0", async (c) => {
+    const value = await load(c, 0);
+    const other = await check(value);
+    return c.json({ value, other });
+  })
+  .post("/route/1", async (c) => {
+    const value = await load(c, 1);
+    const other = await check(value);
+    return c.json({ value, other });
+  })
+  .put("/route/2", async (c) => {
+    const value = await load(c, 2);
+    const other = await check(value);
+    return c.json({ value, other });
+  })
+  .delete("/route/3", async (c) => {
+    const value = await load(c, 3);
+    const other = await check(value);
+    return c.json({ value, other });
+  })
+  .patch("/route/4", async (c) => {
+    const value = await load(c, 4);
+    const other = await check(value);
+    return c.json({ value, other });
+  });
+"#;
+    let after = r#"export const app = new Hono()
+  .get("/route/0", async (c) => {
+    const value = await load(c, 0);
+    const other = await check(value);
+    return c.json({ value, other });
+  })
+  .post("/route/1", async (c) => {
+    const value = await load(c, 1);
+    const other = await check(value);
+    return c.json({ value, other });
+  })
+  .put("/route/2", async (c) => {
+    const value = await load(c, 2);
+    const other = await check(value);
+    return c.json({ value, other });
+  })
+  .delete("/route/3", async (c) => {
+    const value = await load(c, 3);
+    const other = await check(value);
+    return c.json({ value, other });
+  })
+  .patch("/route/4", async (c) => {
+    const value = await load(c, 4);
+    const other = await check(value);
+    audit(c);
+    return c.json({ value, other });
+  });
+"#;
+
+    // Action: run the structural diff, context plugin and Rust pprint.
+    let actual = pprint_diff("example.ts", before, after, 1);
+
+    // Assertion
+    assert_eq!(
+        actual,
+        r#"base/example.ts → head/example.ts — base → head
+ base  head
+    1     1   export const app = new Hono()
+              … base 2–21 / head 2–21 collapsed [fold_state_id=109] …
+   22    22     .patch("/route/4", async (c) => {
+   23    23       const value = await load(c, 4);
+   24    24       const other = await check(value);
+         25 +     audit(c);
+   25    26       return c.json({ value, other });
+   26    27     });
+
+[More context: set visibility.collapsed=false for the indicated fold_state_id
+in the saved JSON, then run diffr pprint again. Full text and children are present.]
+"#
+    );
+}
+
+// Contracts: call-chain-links
+#[test]
+fn changed_middle_link_of_a_call_chain_folds_the_links_around_it() {
+    // Setup
+    let before = r#"export const app = new Hono()
+  .get("/route/0", async (c) => {
+    const value = await load(c, 0);
+    const other = await check(value);
+    return c.json({ value, other });
+  })
+  .post("/route/1", async (c) => {
+    const value = await load(c, 1);
+    const other = await check(value);
+    return c.json({ value, other });
+  })
+  .put("/route/2", async (c) => {
+    const value = await load(c, 2);
+    const other = await check(value);
+    return c.json({ value, other });
+  })
+  .delete("/route/3", async (c) => {
+    const value = await load(c, 3);
+    const other = await check(value);
+    return c.json({ value, other });
+  })
+  .patch("/route/4", async (c) => {
+    const value = await load(c, 4);
+    const other = await check(value);
+    return c.json({ value, other });
+  });
+"#;
+    let after = r#"export const app = new Hono()
+  .get("/route/0", async (c) => {
+    const value = await load(c, 0);
+    const other = await check(value);
+    return c.json({ value, other });
+  })
+  .post("/route/1", async (c) => {
+    const value = await load(c, 1);
+    const other = await check(value);
+    return c.json({ value, other });
+  })
+  .put("/route/2", async (c) => {
+    const value = await load(c, 2);
+    const other = await check(value);
+    audit(c);
+    return c.json({ value, other });
+  })
+  .delete("/route/3", async (c) => {
+    const value = await load(c, 3);
+    const other = await check(value);
+    return c.json({ value, other });
+  })
+  .patch("/route/4", async (c) => {
+    const value = await load(c, 4);
+    const other = await check(value);
+    return c.json({ value, other });
+  });
+"#;
+
+    // Action: run the structural diff, context plugin and Rust pprint.
+    let actual = pprint_diff("example.ts", before, after, 1);
+
+    // Assertion
+    assert_eq!(
+        actual,
+        r#"base/example.ts → head/example.ts — base → head
+ base  head
+    1     1   export const app = new Hono()
+              … base 2–11 / head 2–11 collapsed [fold_state_id=109] …
+   12    12     .put("/route/2", async (c) => {
+   13    13       const value = await load(c, 2);
+   14    14       const other = await check(value);
+         15 +     audit(c);
+   15    16       return c.json({ value, other });
+   16    17     })
+              … base 17–25 / head 18–26 collapsed [fold_state_id=111] …
+   26    27     });
+
+[More context: set visibility.collapsed=false for the indicated fold_state_id
+in the saved JSON, then run diffr pprint again. Full text and children are present.]
+"#
+    );
+}
