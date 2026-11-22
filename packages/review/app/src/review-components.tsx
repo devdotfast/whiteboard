@@ -536,6 +536,7 @@ export function ReviewPanelHost() {
               tour={activePanel.tour.definition}
               activeAnchor={activePanel.anchor.id}
               revealRequest={activePanel.tour.revealRequest}
+              revealCode={activePanel.tour.revealCode}
               onActiveAnchorChange={moveInlineTour}
               onClose={close}
             />
@@ -974,6 +975,7 @@ export function GuidedTourPanel({
   tour,
   activeAnchor,
   revealRequest,
+  revealCode,
   onActiveAnchorChange,
   onClose,
   docked = false,
@@ -981,6 +983,8 @@ export function GuidedTourPanel({
   tour: GuidedTour;
   activeAnchor: string;
   revealRequest: number;
+  /** The `selectionKey` of the code card to reveal in the requested stop. */
+  revealCode?: string;
   onActiveAnchorChange: (anchor: string, options: { reveal: boolean }) => void;
   onClose: () => void;
   /** Keeps the panel in its column at every width (a diagram tour's pane). */
@@ -1115,6 +1119,17 @@ export function GuidedTourPanel({
 
     if (!section || !scroller) return;
 
+    // A stop showing several pieces of code reveals the one asked for. The
+    // first sits under the heading, so the heading still leads to it; code
+    // the stop does not show leaves the heading as the target too.
+    const cards = section.querySelectorAll<HTMLElement>("[data-code-peek-key]");
+
+    const card = [...cards].find(
+      (item) => item.dataset.codePeekKey === revealCode,
+    );
+
+    const target = card && card !== cards[0] ? card : section;
+
     // Source peeks above the requested stop resize as their native editors
     // load. Keep the heading at the reading line until the reader takes over.
     revealingRef.current = true;
@@ -1127,7 +1142,7 @@ export function GuidedTourPanel({
         if (disposed) return;
 
         const offset =
-          section.getBoundingClientRect().top -
+          target.getBoundingClientRect().top -
           scroller.getBoundingClientRect().top -
           TOUR_ACTIVE_TOP_SLACK_PX;
 
@@ -1175,7 +1190,7 @@ export function GuidedTourPanel({
     reveal();
 
     return dispose;
-  }, [activeAnchor, revealRequest]);
+  }, [activeAnchor, revealRequest, revealCode]);
 
   const displayIndex = Math.max(0, activeIndex);
   const lastIndex = tour.stops.length - 1;
