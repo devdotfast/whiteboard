@@ -10,9 +10,7 @@ import {
 } from "@dev.fast/trace-protocol";
 
 import {
-  AGENT_TRACE_PARSER_VERSION,
   type AgentTraceParseResult,
-  extractTraceEventText,
   parseAgentTraceJsonl,
 } from "./agent-trace-parser";
 import { errorMessage } from "./error-message";
@@ -40,7 +38,9 @@ import {
   traceSearchCorpusDir,
   writeNormalizedTraceAtomic,
 } from "./trace-corpus";
+import { materializeLocalTrace } from "./trace-local-read";
 import { findLocalTrace } from "./trace-local-sessions";
+import { normalizeTrace } from "./trace-normalize";
 import { inferRepoFromGit, parseRepo, traceRepoName } from "./trace-repo";
 import { resolveTraceStorage } from "./trace-storage/resolve";
 import { clearTraceEnvCache as clearS3EnvCache } from "./trace-storage/s3-config";
@@ -190,7 +190,13 @@ export async function describeTraceSession(
 ): Promise<ReviewTraceSessionDescriptor> {
   const store = await storageFor(storage);
   const local = findNormalizedTraceFile(ref.sessionId, "main", store);
-  const normalized = local ? readNormalizedTrace(local, store) : null;
+
+  const normalized = !store
+    ? ((await materializeLocalTrace(ref.sessionId, "main", null)) ??
+      (local ? readNormalizedTrace(local, store) : null))
+    : local
+      ? readNormalizedTrace(local, store)
+      : null;
 
   const remote = store
     ? await reachable(() => store.describeObject(ref.sessionId, "main"))
@@ -199,13 +205,21 @@ export async function describeTraceSession(
   const available = normalized !== null || (remote !== null && remote.size > 0);
   const harness = normalized?.metadata.harness ?? "unknown";
 
-  const subagents = await listSessionSubagents(ref.sessionId, store);
+  const subagents = [
+    ...new Set([
+      ...(normalized?.metadata.subagents ?? []),
+      ...(await listSessionSubagents(ref.sessionId, store)),
+    ]),
+  ].sort();
 
   return {
     sessionId: ref.sessionId,
     harness,
     available,
-    source: available ? "r2" : null,
+    source:
+      available && normalized?.metadata.source.storage !== "local"
+        ? "r2"
+        : null,
     notSynced: !available,
     subagents,
     commits: ref.commits,
@@ -225,9 +239,19 @@ export async function loadReviewAgentTrace(input: {
   const { sessionId, trace } = input;
 
   if (!sessionIdSchema.safeParse(sessionId).success) return null;
-  const traceName = trace ?? "main";
+  const traceName = (trace ?? "main").replace(/\.jsonl$/, "");
   const storage = await storageFor(input.storage, input.cwd);
   const requestedRepo = input.repo ? normalizeRepo(input.repo) : null;
+
+  if (!storage) {
+    const local = await materializeLocalTrace(
+      sessionId,
+      traceName,
+      requestedRepo,
+    );
+
+    if (local) return loadedNormalizedTrace(local, input.commits, "current");
+  }
 
   let scope = storage ? storage.cacheScope(requestedRepo) : requestedRepo;
 
@@ -375,7 +399,7 @@ function loadedNormalizedTrace(
     sessionId: metadata.session,
     harness: metadata.harness,
     available: true,
-    source: "r2",
+    source: metadata.source.storage === "local" ? null : "r2",
     subagents: metadata.subagents,
     commits: commits ?? [],
   };
@@ -446,38 +470,19 @@ async function materializeNormalizedTrace(input: {
       input.storage,
     );
 
-    const normalized: NormalizedTrace = {
-      metadata: {
-        type: "metadata",
-        version: 1,
-        parserVersion: AGENT_TRACE_PARSER_VERSION,
-        repository: input.repository,
-        session: input.sessionId,
-        trace: input.traceName,
-        harness: parsed.harness,
-        title: parsed.title,
-        startedAt: parsed.startedAt,
-        endedAt: parsed.endedAt,
-        activeMs: parsed.activeMs,
-        userTurns: parsed.userTurns,
-        toolCalls: parsed.toolCalls,
-        subagents,
-        source: {
-          r2Key: legacyObjectKey(input.sessionId, input.traceName),
-          bytes: downloaded.size,
-          checkedAt: new Date().toISOString(),
-          contentId: downloaded.contentId,
-          storage: input.storage.cacheIdentity(),
-        },
+    const normalized = normalizeTrace(parsed, {
+      repository: input.repository,
+      sessionId: input.sessionId,
+      traceName: input.traceName,
+      subagents,
+      source: {
+        r2Key: legacyObjectKey(input.sessionId, input.traceName),
+        bytes: downloaded.size,
+        checkedAt: new Date().toISOString(),
+        contentId: downloaded.contentId,
+        storage: input.storage.cacheIdentity(),
       },
-      events: parsed.events.map((event, index) => ({
-        type: "event",
-        index,
-        kind: event.kind,
-        text: extractTraceEventText(event),
-        event,
-      })),
-    };
+    });
 
     writeNormalizedTraceAtomic(input.normalizedPath, normalized);
 
