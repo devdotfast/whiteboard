@@ -76,6 +76,38 @@ rename to new.ts
     });
   });
 
+  it("counts hunk lines whose content starts with -- or ++ as changes", () => {
+    const sqlPatch = `diff --git a/q.sql b/q.sql
+index 635e6df..666536e 100644
+--- a/q.sql
++++ b/q.sql
+@@ -2 +2 @@ select 1;
+--- old comment
++++ not really
+diff --git a/src/example.ts b/src/example.ts
+index 1111111..2222222 100644
+--- a/src/example.ts
++++ b/src/example.ts
+@@ -10 +10 @@
+-oldA
++newA
+`;
+
+    for (const side of ["base", "head"] as const) {
+      const counts = parseGitUnifiedDiffLineCounts(sqlPatch, side);
+
+      expect([...counts.keys()]).toEqual(["q.sql", "src/example.ts"]);
+      expect(counts.get("q.sql")?.get(2)).toMatchObject({
+        additions: 1,
+        deletions: 1,
+      });
+      expect(counts.get("src/example.ts")?.get(10)).toMatchObject({
+        additions: 1,
+        deletions: 1,
+      });
+    }
+  });
+
   it("maps changes through authored source ranges", () => {
     const countsByFile = parseGitUnifiedDiffLineCounts(patch);
 
