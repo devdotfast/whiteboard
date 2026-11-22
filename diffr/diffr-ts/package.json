@@ -1,6 +1,6 @@
 {
   "name": "@dev.fast/diffr",
-  "version": "0.1.23",
+  "version": "0.1.24",
   "description": "diffr's NDJSON wire contract, validators, and the diffr binary for this platform",
   "repository": {
     "type": "git",
